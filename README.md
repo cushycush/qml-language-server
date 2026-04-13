@@ -86,9 +86,36 @@ Or use the built-in Language Server Protocol client with:
 
 ### Neovim
 
-Add to your `init.lua`:
+For Neovim 0.11+, use the built-in LSP configuration:
 
 ```lua
+-- In your init.lua or lua/config/lsp.lua
+vim.lsp.config.qml = {
+  name = "qml-language-server",
+  filetypes = { "qml" },
+  root_dir = function(fname)
+    -- Find project root (git, .qml files, or parent directory)
+    local root_patterns = { '.git', '.qml', 'qmldir' }
+    for _, pattern in ipairs(root_patterns) do
+      local root = vim.fs.find(pattern, { path = fname, upward = true })[1]
+      if root then
+        return vim.fs.dirname(root)
+      end
+    end
+    return vim.fs.dirname(fname)
+  end,
+  cmd = { "/path/to/qml-language-server" },
+  settings = {},
+}
+
+-- Enable the language server
+vim.lsp.enable("qml")
+```
+
+For Neovim 0.10 and earlier, use the `lspconfig` plugin:
+
+```lua
+-- Using lspconfig (Neovim 0.10 and earlier)
 local lspconfig = require('lspconfig')
 
 lspconfig.qmlls.setup {
