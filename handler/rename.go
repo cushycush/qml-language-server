@@ -26,7 +26,7 @@ func (h *Handler) Rename(_ context.Context, params *lsp.RenameParams) (*lsp.Work
 	lang := h.parser.Language()
 	content := []byte(doc)
 
-	node := h.parser.GetNodeAt(params.TextDocument.URI, params.Position)
+	node := h.parser.GetNodeAt(params.TextDocument.URI, params.Position, content)
 	if node == nil || node.Type(lang) != "identifier" {
 		return nil, nil
 	}
@@ -70,16 +70,21 @@ func collectRenameEdits(node *gotreesitter.Node, lang *gotreesitter.Language, co
 }
 
 func (h *Handler) PrepareRename(_ context.Context, params *lsp.PrepareRenameParams) (*lsp.PrepareRenameResult, error) {
+	doc, ok := h.documents[params.TextDocument.URI]
+	if !ok {
+		return nil, nil
+	}
+
+	content := []byte(doc)
+
 	if h.parser == nil {
 		return nil, nil
 	}
 
-	node := h.parser.GetNodeAt(params.TextDocument.URI, params.Position)
+	node := h.parser.GetNodeAt(params.TextDocument.URI, params.Position, content)
 	if node == nil || node.Type(h.parser.Language()) != "identifier" {
 		return nil, nil
 	}
-
-	content := []byte(h.documents[params.TextDocument.URI])
 	placeholder := string(content[node.StartByte():node.EndByte()])
 
 	return &lsp.PrepareRenameResult{

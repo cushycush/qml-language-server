@@ -18,17 +18,18 @@ func (h *Handler) Hover(_ context.Context, params *lsp.HoverParams) (*lsp.Hover,
 		return nil, nil
 	}
 
+	content := []byte(doc)
+
 	if h.parser == nil {
 		return simpleHover(doc, pos), nil
 	}
 
-	node := h.parser.GetNodeAt(uri, pos)
+	node := h.parser.GetNodeAt(uri, pos, content)
 	if node == nil {
 		return simpleHover(doc, pos), nil
 	}
 
 	lang := h.parser.Language()
-	content := []byte(doc)
 	nodeText := string(content[node.StartByte():node.EndByte()])
 	nodeType := node.Type(lang)
 

@@ -29,7 +29,7 @@ func (h *Handler) Completion(_ context.Context, params *lsp.CompletionParams) (*
 	var items []lsp.CompletionItem
 
 	if h.parser != nil {
-		node := h.parser.GetNodeAt(params.TextDocument.URI, pos)
+		node := h.parser.GetNodeAt(params.TextDocument.URI, pos, []byte(doc))
 		if node != nil {
 			items = append(items, getContextCompletions(node, h.parser.Language(), []byte(doc))...)
 		}

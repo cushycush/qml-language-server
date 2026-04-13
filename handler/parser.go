@@ -70,7 +70,7 @@ func (p *QMLParser) GetTree(uri lsp.DocumentURI) *gotreesitter.Tree {
 	return p.trees[uri]
 }
 
-func (p *QMLParser) GetNodeAt(uri lsp.DocumentURI, pos lsp.Position) *gotreesitter.Node {
+func (p *QMLParser) GetNodeAt(uri lsp.DocumentURI, pos lsp.Position, content []byte) *gotreesitter.Node {
 	tree, ok := p.trees[uri]
 	if !ok {
 		return nil
@@ -81,12 +81,8 @@ func (p *QMLParser) GetNodeAt(uri lsp.DocumentURI, pos lsp.Position) *gotreesitt
 		return nil
 	}
 
-	byteOffset := positionToByteOffset([]byte(getDocContent(uri)), pos)
+	byteOffset := positionToByteOffset(content, pos)
 	return getNodeAtByte(root, byteOffset)
-}
-
-func getDocContent(uri lsp.DocumentURI) string {
-	return ""
 }
 
 func positionToByteOffset(content []byte, pos lsp.Position) uint32 {

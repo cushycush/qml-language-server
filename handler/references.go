@@ -26,7 +26,7 @@ func (h *Handler) References(_ context.Context, params *lsp.ReferenceParams) ([]
 	lang := h.parser.Language()
 	content := []byte(doc)
 
-	node := h.parser.GetNodeAt(params.TextDocument.URI, params.Position)
+	node := h.parser.GetNodeAt(params.TextDocument.URI, params.Position, content)
 	if node == nil {
 		return nil, nil
 	}
