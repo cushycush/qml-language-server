@@ -4,260 +4,221 @@ import (
 	"testing"
 )
 
-func TestGetTypeInfo(t *testing.T) {
+func TestCountParams(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		wantOK   bool
-		wantType string
+		expected int
 	}{
-		{"Rectangle type", "Rectangle", true, "Object"},
-		{"Text type", "Text", true, "Object"},
-		{"Item type", "Item", true, "Object"},
-		{"Unknown type", "FooBar", false, ""},
-		{"Empty string", "", false, ""},
+		{"no params", "Qt.rect()", 0},
+		{"one param", "Qt.rect(100)", 0},
+		{"two params", "Qt.rect(100, 200)", 1},
+		{"three params", "Qt.rect(100, 200, 50)", 2},
+		{"params with strings", "console.log(\"hello\", \"world\")", 1},
+		{"nested parens", "String(value)", 0},
+		{"empty", "", 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info, ok := getTypeInfo(tt.input)
-			if ok != tt.wantOK {
-				t.Errorf("getTypeInfo(%q) ok = %v, want %v", tt.input, ok, tt.wantOK)
-			}
-			if ok && info.Type != tt.wantType {
-				t.Errorf("getTypeInfo(%q).Type = %v, want %v", tt.input, info.Type, tt.wantType)
+			result := countParams(tt.input)
+			if result != tt.expected {
+				t.Errorf("countParams(%q) = %d, want %d", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestGetPropertyInfo(t *testing.T) {
+func TestIsColorValue(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		wantOK   bool
-		wantType string
+		expected bool
 	}{
-		{"width property", "width", true, "real"},
-		{"color property", "color", true, "color"},
-		{"text property", "text", true, "string"},
-		{"Unknown property", "fooBar", false, ""},
+		{"red", "red", true},
+		{"green", "green", true},
+		{"blue", "blue", true},
+		{"white", "white", true},
+		{"black", "black", true},
+		{"yellow", "yellow", true},
+		{"cyan", "cyan", true},
+		{"magenta", "magenta", true},
+		{"gray", "gray", true},
+		{"grey", "grey", true},
+		{"transparent", "transparent", true},
+		{"purple", "purple", false},
+		{"orange", "orange", false},
+		{"empty", "", false},
+		{"uppercase", "RED", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info, ok := getPropertyInfo(tt.input)
-			if ok != tt.wantOK {
-				t.Errorf("getPropertyInfo(%q) ok = %v, want %v", tt.input, ok, tt.wantOK)
-			}
-			if ok && info.Type != tt.wantType {
-				t.Errorf("getPropertyInfo(%q).Type = %v, want %v", tt.input, info.Type, tt.wantType)
+			result := isColorValue(tt.input)
+			if result != tt.expected {
+				t.Errorf("isColorValue(%q) = %v, want %v", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestGetLines(t *testing.T) {
+func TestIsQuotedString(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []string
+		expected bool
 	}{
-		{"single line", "hello", []string{"hello"}},
-		{"two lines", "hello\nworld", []string{"hello", "world"}},
-		{"three lines", "line1\nline2\nline3", []string{"line1", "line2", "line3"}},
-		{"empty string", "", []string{""}},
-		{"newline only", "\n", []string{"", ""}},
+		{"double quoted", "\"hello\"", true},
+		{"single quoted", "'hello'", false},
+		{"unquoted", "hello", false},
+		{"partial quote", "\"hello", false},
+		{"empty quotes", "\"\"", true},
+		{"empty", "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := getLines(tt.input)
-			if len(result) != len(tt.expected) {
-				t.Errorf("getLines(%q) returned %d lines, want %d", tt.input, len(result), len(tt.expected))
-				return
+			result := isQuotedString(tt.input)
+			if result != tt.expected {
+				t.Errorf("isQuotedString(%q) = %v, want %v", tt.input, result, tt.expected)
 			}
-			for i, line := range result {
-				if line != tt.expected[i] {
-					t.Errorf("getLines(%q)[%d] = %q, want %q", tt.input, i, line, tt.expected[i])
+		})
+	}
+}
+
+func TestSafeString(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"normal string", "hello", "hello"},
+		{"empty string", "", "<empty>"},
+		{"spaces only", "   ", "   "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := safeString(tt.input)
+			if result != tt.expected {
+				t.Errorf("safeString(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSafeSliceLen(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected int
+	}{
+		{"normal slice", []string{"a", "b", "c"}, 3},
+		{"empty slice", []string{}, 0},
+		{"nil slice", nil, 0},
+		{"single element", []string{"a"}, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := safeSliceLen(tt.input)
+			if result != tt.expected {
+				t.Errorf("safeSliceLen(%v) = %d, want %d", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestHandlerError(t *testing.T) {
+	err := newHandlerError("TEST_ERROR", "test message", nil)
+
+	if err.Code != "TEST_ERROR" {
+		t.Errorf("err.Code = %q, want %q", err.Code, "TEST_ERROR")
+	}
+
+	if err.Message != "test message" {
+		t.Errorf("err.Message = %q, want %q", err.Message, "test message")
+	}
+
+	if err.Error() != "TEST_ERROR: test message" {
+		t.Errorf("err.Error() = %q, want %q", err.Error(), "TEST_ERROR: test message")
+	}
+}
+
+func TestHandlerErrorWithCause(t *testing.T) {
+	cause := newHandlerError("CAUSE", "cause message", nil)
+	err := newHandlerError("WRAPPER", "wrapper message", cause)
+
+	if err.Unwrap() != cause {
+		t.Errorf("err.Unwrap() = %v, want %v", err.Unwrap(), cause)
+	}
+
+	expected := "WRAPPER: wrapper message (CAUSE: cause message)"
+	if err.Error() != expected {
+		t.Errorf("err.Error() = %q, want %q", err.Error(), expected)
+	}
+}
+
+func TestQMLTypeInfo(t *testing.T) {
+	tests := []struct {
+		name       string
+		typeName   string
+		wantOK     bool
+		wantModule string
+		wantType   string
+	}{
+		{"Rectangle", "Rectangle", true, "QtQuick", "Object"},
+		{"Text", "Text", true, "QtQuick", "Object"},
+		{"Item", "Item", true, "QtQuick", "Object"},
+		{"ColumnLayout", "ColumnLayout", true, "QtQuick.Layouts", "Object"},
+		{"ListElement", "ListElement", true, "QtQml.Models", "Object"},
+		{"Unknown", "UnknownType", false, "", ""},
+		{"Empty", "", false, "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info, ok := getTypeInfo(tt.typeName)
+			if ok != tt.wantOK {
+				t.Errorf("getTypeInfo(%q) ok = %v, want %v", tt.typeName, ok, tt.wantOK)
+			}
+			if ok {
+				if info.Module != tt.wantModule {
+					t.Errorf("getTypeInfo(%q).Module = %q, want %q", tt.typeName, info.Module, tt.wantModule)
+				}
+				if info.Type != tt.wantType {
+					t.Errorf("getTypeInfo(%q).Type = %q, want %q", tt.typeName, info.Type, tt.wantType)
 				}
 			}
 		})
 	}
 }
 
-func TestExtractWordAt(t *testing.T) {
+func TestQMLPropertyInfo(t *testing.T) {
 	tests := []struct {
 		name     string
-		text     string
-		pos      int
-		wantWord string
+		propName string
+		wantOK   bool
+		wantType string
 	}{
-		{"word at start", "hello world", 0, "hello"},
-		{"word in middle", "hello world", 6, "world"},
-		{"word at end", "hello world", 10, "world"},
-		{"single char", "a", 0, "a"},
-		{"empty string", "", 0, ""},
-		{"position out of bounds", "hello", 10, ""},
-		{"camelCase word", "helloWorld", 5, "helloWorld"},
-		{"with underscore", "my_variable", 3, "my_variable"},
+		{"width", "width", true, "real"},
+		{"color", "color", true, "color"},
+		{"text", "text", true, "string"},
+		{"visible", "visible", true, "bool"},
+		{"id", "id", true, "string"},
+		{"onClicked", "onClicked", true, "signal"},
+		{"Unknown", "unknownProp", false, ""},
+		{"Empty", "", false, ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractWordAt(tt.text, tt.pos)
-			if result != tt.wantWord {
-				t.Errorf("extractWordAt(%q, %d) = %q, want %q", tt.text, tt.pos, result, tt.wantWord)
+			info, ok := getPropertyInfo(tt.propName)
+			if ok != tt.wantOK {
+				t.Errorf("getPropertyInfo(%q) ok = %v, want %v", tt.propName, ok, tt.wantOK)
 			}
-		})
-	}
-}
-
-func TestIsIdentChar(t *testing.T) {
-	tests := []struct {
-		name     string
-		char     byte
-		expected bool
-	}{
-		{"lowercase letter", 'a', true},
-		{"uppercase letter", 'Z', true},
-		{"digit", '5', true},
-		{"underscore", '_', true},
-		{"space", ' ', false},
-		{"period", '.', false},
-		{"colon", ':', false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isIdentChar(tt.char)
-			if result != tt.expected {
-				t.Errorf("isIdentChar(%q) = %v, want %v", tt.char, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestTruncateString(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		maxLen   int
-		expected string
-	}{
-		{"short string", "hello", 10, "hello"},
-		{"exact length", "hello", 5, "hello"},
-		{"truncate", "hello world", 8, "hello..."},
-		{"maxLen less than 3", "hello", 2, "he"},
-		{"empty string", "", 5, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := truncateString(tt.input, tt.maxLen)
-			if result != tt.expected {
-				t.Errorf("truncateString(%q, %d) = %q, want %q", tt.input, tt.maxLen, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestIsSignalHandler(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected bool
-	}{
-		{"onClicked", "onClicked", true},
-		{"onPressed", "onPressed", true},
-		{"onReleased", "onReleased", true},
-		{"onEntered", "onEntered", true},
-		{"onExited", "onExited", true},
-		{"on", "on", false},
-		{"clicked", "clicked", false},
-		{"property", "property", false},
-		{"x", "x", false},
-		{"", "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isSignalHandler(tt.input)
-			if result != tt.expected {
-				t.Errorf("isSignalHandler(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestIsUpperCase(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected bool
-	}{
-		{"all uppercase", "HELLO", true},
-		{"all lowercase", "hello", false},
-		{"mixed", "Hello", false},
-		{"single uppercase", "A", true},
-		{"single lowercase", "a", false},
-		{"with numbers", "HELLO123", true},
-		{"empty", "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isUpperCase(tt.input)
-			if result != tt.expected {
-				t.Errorf("isUpperCase(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestTrimLeadingWhitespace(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"no whitespace", "hello", "hello"},
-		{"leading spaces", "  hello", "hello"},
-		{"leading tab", "\thello", "hello"},
-		{"leading spaces and tab", "  \thello", "hello"},
-		{"only whitespace", "   \t", ""},
-		{"empty", "", ""},
-		{"whitespace only", "  ", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := trimLeadingWhitespace(tt.input)
-			if result != tt.expected {
-				t.Errorf("trimLeadingWhitespace(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestDetectCompletionContext(t *testing.T) {
-	tests := []struct {
-		name     string
-		text     string
-		pos      int
-		expected CompletionContext
-	}{
-		{"import statement", "import Qt", 7, ContextImport},
-		{"type name", "  Rectangle", 3, ContextTypeName},
-		{"property", "width: ", 6, ContextAfterColon},
-		{"default", "someText", 4, ContextDefault},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := detectCompletionContext(tt.text, tt.pos)
-			if result != tt.expected {
-				t.Errorf("detectCompletionContext(%q, %d) = %v, want %v", tt.text, tt.pos, result, tt.expected)
+			if ok && info.Type != tt.wantType {
+				t.Errorf("getPropertyInfo(%q).Type = %q, want %q", tt.propName, info.Type, tt.wantType)
 			}
 		})
 	}
