@@ -95,6 +95,9 @@ func (h *Handler) Exit(_ context.Context) error {
 func (h *Handler) publishDiagnostics(uri lsp.DocumentURI, diagnostics []lsp.Diagnostic) {
 	if h.server != nil && h.server.Client != nil {
 		ctx := context.Background()
+		if diagnostics == nil {
+			diagnostics = []lsp.Diagnostic{}
+		}
 		h.server.Client.PublishDiagnostics(ctx, &lsp.PublishDiagnosticsParams{
 			URI:         uri,
 			Diagnostics: diagnostics,
