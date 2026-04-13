@@ -127,6 +127,69 @@ lspconfig.qmlls.setup {
 }
 ```
 
+### Neovim with blink.cmp
+
+For a modern completion experience with fuzzy matching and snippets, use [blink.cmp](https://github.com/saghen/blink.cmp):
+
+```lua
+-- In your init.lua or lua/config/blink.lua
+{
+  'saghen/blink.cmp',
+  dependencies = {
+    'rafamadriz/friendly-snippets', -- Optional: QML snippets
+  },
+  opts = {
+    sources = {
+      default = { 'lsp' },
+      providers = {
+        lsp = {
+          name = 'qml',
+          module = 'blink.cmp.sources.lsp',
+          score_offset = 100, -- Boost LSP completions
+        },
+      },
+    },
+    completion = {
+      menu = {
+        border = 'rounded',
+        draw = {
+          components = {
+            kind_icon = {
+              width = 1,
+              text = {
+                blink.cmp.Icon('kind'),
+              },
+            },
+          },
+        },
+      },
+      documentation = {
+        auto_show = true,
+        window = {
+          border = 'rounded',
+        },
+      },
+    },
+    snippets = {
+      preset = 'friendly-snippets',
+    },
+  },
+}
+```
+
+For the LSP integration with blink.cmp:
+
+```lua
+-- Ensure LSP is configured before blink.cmp loads
+vim.lsp.config.qml = {
+  name = "qml-language-server",
+  filetypes = { "qml" },
+  cmd = { "/path/to/qml-language-server" },
+}
+
+vim.lsp.enable("qml")
+```
+
 ## Project Structure
 
 ```
