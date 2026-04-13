@@ -1,0 +1,9 @@
+.git
+.github
+.gitignore
+README.md
+*.md
+qml-language-server
+test.qml
+diagnostics
+qml
