@@ -64,6 +64,12 @@ func (p *QMLParser) Invalidate(uri lsp.DocumentURI) {
 	delete(p.trees, uri)
 }
 
+func (p *QMLParser) GetTree(uri lsp.DocumentURI) *gotreesitter.Tree {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.trees[uri]
+}
+
 func (p *QMLParser) GetNodeAt(uri lsp.DocumentURI, pos lsp.Position) *gotreesitter.Node {
 	tree, ok := p.trees[uri]
 	if !ok {
