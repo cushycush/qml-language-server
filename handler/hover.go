@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,7 +9,10 @@ import (
 	"github.com/owenrumney/go-lsp/lsp"
 )
 
-func (h *Handler) Hover(uri lsp.DocumentURI, pos lsp.Position) (*lsp.Hover, error) {
+func (h *Handler) Hover(_ context.Context, params *lsp.HoverParams) (*lsp.Hover, error) {
+	uri := params.TextDocument.URI
+	pos := params.Position
+
 	doc, ok := h.documents[uri]
 	if !ok {
 		return nil, nil

@@ -69,7 +69,7 @@ func collectRenameEdits(node *gotreesitter.Node, lang *gotreesitter.Language, co
 	}
 }
 
-func (h *Handler) PrepareRename(_ context.Context, params *lsp.PrepareRenameParams) (*lsp.Range, error) {
+func (h *Handler) PrepareRename(_ context.Context, params *lsp.PrepareRenameParams) (*lsp.PrepareRenameResult, error) {
 	if h.parser == nil {
 		return nil, nil
 	}
@@ -79,8 +79,14 @@ func (h *Handler) PrepareRename(_ context.Context, params *lsp.PrepareRenamePara
 		return nil, nil
 	}
 
-	return &lsp.Range{
-		Start: lsp.Position{Line: 0, Character: int(node.StartByte())},
-		End:   lsp.Position{Line: 0, Character: int(node.EndByte())},
+	content := []byte(h.documents[params.TextDocument.URI])
+	placeholder := string(content[node.StartByte():node.EndByte()])
+
+	return &lsp.PrepareRenameResult{
+		Range: lsp.Range{
+			Start: lsp.Position{Line: int(params.Position.Line), Character: int(node.StartByte())},
+			End:   lsp.Position{Line: int(params.Position.Line), Character: int(node.EndByte())},
+		},
+		Placeholder: placeholder,
 	}, nil
 }

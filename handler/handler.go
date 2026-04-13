@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/owenrumney/go-lsp/lsp"
@@ -101,7 +102,7 @@ func (h *Handler) publishDiagnostics(uri lsp.DocumentURI, diagnostics []lsp.Diag
 	}
 }
 
-func (h *Handler) DidOpenTextDocument(ctx context.Context, params *lsp.DidOpenTextDocumentParams) error {
+func (h *Handler) DidOpen(ctx context.Context, params *lsp.DidOpenTextDocumentParams) error {
 	h.documents[params.TextDocument.URI] = params.TextDocument.Text
 	if h.parser != nil {
 		h.parser.Parse(params.TextDocument.URI, params.TextDocument.Text)
@@ -110,7 +111,13 @@ func (h *Handler) DidOpenTextDocument(ctx context.Context, params *lsp.DidOpenTe
 	return nil
 }
 
-func (h *Handler) DidChangeTextDocument(_ context.Context, params *lsp.DidChangeTextDocumentParams) error {
+func (h *Handler) logf(format string, args ...any) {
+	if h.logger != nil {
+		h.logger.Info(fmt.Sprintf(format, args...))
+	}
+}
+
+func (h *Handler) DidChange(_ context.Context, params *lsp.DidChangeTextDocumentParams) error {
 	for _, change := range params.ContentChanges {
 		h.documents[params.TextDocument.URI] = change.Text
 	}
@@ -121,7 +128,7 @@ func (h *Handler) DidChangeTextDocument(_ context.Context, params *lsp.DidChange
 	return nil
 }
 
-func (h *Handler) DidCloseTextDocument(_ context.Context, params *lsp.DidCloseTextDocumentParams) error {
+func (h *Handler) DidClose(_ context.Context, params *lsp.DidCloseTextDocumentParams) error {
 	delete(h.documents, params.TextDocument.URI)
 	if h.parser != nil {
 		h.parser.Invalidate(params.TextDocument.URI)
@@ -130,7 +137,7 @@ func (h *Handler) DidCloseTextDocument(_ context.Context, params *lsp.DidCloseTe
 	return nil
 }
 
-func (h *Handler) DidSaveTextDocument(_ context.Context, params *lsp.DidSaveTextDocumentParams) error {
+func (h *Handler) DidSave(_ context.Context, params *lsp.DidSaveTextDocumentParams) error {
 	if params.Text != nil {
 		h.documents[params.TextDocument.URI] = *params.Text
 	}

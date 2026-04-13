@@ -7,7 +7,7 @@ import (
 	"github.com/owenrumney/go-lsp/lsp"
 )
 
-func (h *Handler) Definition(_ context.Context, params *lsp.TextDocumentPositionParams) ([]lsp.Location, error) {
+func (h *Handler) Definition(_ context.Context, params *lsp.DefinitionParams) ([]lsp.Location, error) {
 	doc, ok := h.documents[params.TextDocument.URI]
 	if !ok || h.parser == nil {
 		return nil, nil
