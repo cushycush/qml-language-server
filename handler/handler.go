@@ -12,6 +12,7 @@ type Handler struct {
 	logger    *slog.Logger
 	documents map[lsp.DocumentURI]string
 	parser    *QMLParser
+	server    *server.Server
 }
 
 func New(logger *slog.Logger) *Handler {
@@ -23,8 +24,8 @@ func New(logger *slog.Logger) *Handler {
 }
 
 func (h *Handler) Serve(ctx context.Context) error {
-	srv := server.NewServer(h)
-	return srv.Run(ctx, server.RunStdio())
+	h.server = server.NewServer(h)
+	return h.server.Run(ctx, server.RunStdio())
 }
 
 func (h *Handler) Initialize(_ context.Context, _ *lsp.InitializeParams) (*lsp.InitializeResult, error) {
@@ -90,10 +91,21 @@ func (h *Handler) Exit(_ context.Context) error {
 	return nil
 }
 
-func (h *Handler) DidOpenTextDocument(_ context.Context, params *lsp.DidOpenTextDocumentParams) error {
+func (h *Handler) publishDiagnostics(uri lsp.DocumentURI, diagnostics []lsp.Diagnostic) {
+	if h.server != nil && h.server.Client != nil {
+		ctx := context.Background()
+		h.server.Client.PublishDiagnostics(ctx, &lsp.PublishDiagnosticsParams{
+			URI:         uri,
+			Diagnostics: diagnostics,
+		})
+	}
+}
+
+func (h *Handler) DidOpenTextDocument(ctx context.Context, params *lsp.DidOpenTextDocumentParams) error {
 	h.documents[params.TextDocument.URI] = params.TextDocument.Text
 	if h.parser != nil {
 		h.parser.Parse(params.TextDocument.URI, params.TextDocument.Text)
+		h.publishDiagnostics(params.TextDocument.URI, h.getDiagnostics(params.TextDocument.URI))
 	}
 	return nil
 }
@@ -104,6 +116,7 @@ func (h *Handler) DidChangeTextDocument(_ context.Context, params *lsp.DidChange
 	}
 	if h.parser != nil {
 		h.parser.Parse(params.TextDocument.URI, h.documents[params.TextDocument.URI])
+		h.publishDiagnostics(params.TextDocument.URI, h.getDiagnostics(params.TextDocument.URI))
 	}
 	return nil
 }
@@ -113,6 +126,7 @@ func (h *Handler) DidCloseTextDocument(_ context.Context, params *lsp.DidCloseTe
 	if h.parser != nil {
 		h.parser.Invalidate(params.TextDocument.URI)
 	}
+	h.publishDiagnostics(params.TextDocument.URI, nil)
 	return nil
 }
 
@@ -122,12 +136,31 @@ func (h *Handler) DidSaveTextDocument(_ context.Context, params *lsp.DidSaveText
 	}
 	if h.parser != nil {
 		h.parser.Parse(params.TextDocument.URI, h.documents[params.TextDocument.URI])
+		h.publishDiagnostics(params.TextDocument.URI, h.getDiagnostics(params.TextDocument.URI))
 	}
 	return nil
 }
 
 func (h *Handler) DidChangeWatchedFiles(_ context.Context, params *lsp.DidChangeWatchedFilesParams) error {
 	return nil
+}
+
+func (h *Handler) getDiagnostics(uri lsp.DocumentURI) []lsp.Diagnostic {
+	if h.parser == nil {
+		return nil
+	}
+
+	tree := h.parser.GetTree(uri)
+	if tree == nil {
+		return nil
+	}
+
+	lang := h.parser.Language()
+	var diagnostics []lsp.Diagnostic
+
+	collectDiagnostics(tree.RootNode(), lang, &diagnostics)
+
+	return diagnostics
 }
 
 func boolPtr(b bool) *bool { return &b }
