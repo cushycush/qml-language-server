@@ -1,7 +1,11 @@
 package handler
 
 import (
+	"context"
+	"strings"
 	"testing"
+
+	"github.com/owenrumney/go-lsp/lsp"
 )
 
 func TestCountParams(t *testing.T) {
@@ -192,6 +196,80 @@ func TestQMLTypeInfo(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHoverOnKnownType(t *testing.T) {
+	h := newTestHandler(t, "test://foo.qml", "import QtQuick\n\nRectangle {\n    width: 100\n}\n")
+
+	cases := []struct {
+		name     string
+		pos      lsp.Position
+		wantText string
+	}{
+		{"on type name Rectangle", lsp.Position{Line: 2, Character: 3}, "Rectangle"},
+		{"at end of Rectangle", lsp.Position{Line: 2, Character: 9}, "Rectangle"},
+		{"on property width", lsp.Position{Line: 3, Character: 6}, "width"},
+		{"on import module", lsp.Position{Line: 0, Character: 10}, "QtQuick"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := h.Hover(context.Background(), &lsp.HoverParams{
+				TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+					TextDocument: lsp.TextDocumentIdentifier{URI: "test://foo.qml"},
+					Position:     tt.pos,
+				},
+			})
+			if err != nil {
+				t.Fatalf("Hover returned error: %v", err)
+			}
+			if got == nil {
+				t.Fatal("Hover returned nil")
+			}
+			if !strings.Contains(got.Contents.Value, tt.wantText) {
+				t.Errorf("Hover value %q does not mention %q", got.Contents.Value, tt.wantText)
+			}
+			if got.Range == nil {
+				t.Error("Hover range is nil")
+			}
+		})
+	}
+}
+
+func TestCompletionPopulatesDocumentation(t *testing.T) {
+	h := newTestHandler(t, "test://foo.qml", "import QtQuick\n\nRectangle {\n    \n}\n")
+
+	list, err := h.Completion(context.Background(), &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: "test://foo.qml"},
+			Position:     lsp.Position{Line: 3, Character: 4},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Completion returned error: %v", err)
+	}
+	if list == nil || len(list.Items) == 0 {
+		t.Fatal("Completion returned no items")
+	}
+	// Every item we emit should ship with Detail or Documentation.
+	for _, item := range list.Items {
+		if item.Documentation == nil && item.Detail == "" {
+			t.Errorf("Completion item %q has neither Detail nor Documentation", item.Label)
+		}
+	}
+}
+
+func newTestHandler(t *testing.T, uri lsp.DocumentURI, text string) *Handler {
+	t.Helper()
+	h := New(nil)
+	if h.parser == nil {
+		t.Skip("parser unavailable in test environment")
+	}
+	if err := h.DidOpen(context.Background(), &lsp.DidOpenTextDocumentParams{
+		TextDocument: lsp.TextDocumentItem{URI: uri, Text: text},
+	}); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+	return h
 }
 
 func TestQMLPropertyInfo(t *testing.T) {

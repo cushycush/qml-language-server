@@ -9,16 +9,16 @@ import (
 )
 
 func (h *Handler) Definition(_ context.Context, params *lsp.DefinitionParams) ([]lsp.Location, error) {
-	doc, ok := h.documents[params.TextDocument.URI]
+	uri := params.TextDocument.URI
+	doc, ok := h.getDocument(uri)
 	if !ok || h.parser == nil {
 		return nil, nil
 	}
 
-	tree := h.parser.GetTree(params.TextDocument.URI)
+	tree := h.parser.GetTree(uri)
 	if tree == nil {
 		return nil, nil
 	}
-
 	root := tree.RootNode()
 	if root == nil {
 		return nil, nil
@@ -26,343 +26,147 @@ func (h *Handler) Definition(_ context.Context, params *lsp.DefinitionParams) ([
 
 	lang := h.parser.Language()
 	content := []byte(doc)
-	pos := params.Position
-
-	byteOffset := positionToByte(content, pos)
-	node := findSmallestNodeAt(root, byteOffset, lang)
-
+	offset := positionToByte(content, params.Position)
+	node := findSmallestNodeAt(root, offset, lang)
 	if node == nil {
 		return nil, nil
 	}
 
-	locations, _ := findDefinition(node, lang, content, root)
-
-	if len(locations) == 0 {
-		locations = findIdDefinition(node, lang, content)
-	}
-
-	return locations, nil
+	return findDefinition(node, lang, content, root, uri), nil
 }
 
-func findIdDefinition(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) []lsp.Location {
-	var locations []lsp.Location
-
-	if node.Type(lang) == "identifier" {
-		parent := node.Parent()
-		if parent != nil && parent.Type(lang) == "ui_object_binding" {
-			targetId := string(content[parent.StartByte():parent.EndByte()])
-			locations = findIdDeclarations(targetId, lang, content)
-		}
-	}
-
-	return locations
-}
-
-func findIdDeclarations(targetId string, lang *gotreesitter.Language, content []byte) []lsp.Location {
-	var locations []lsp.Location
-	return locations
-}
-
-func positionToByte(content []byte, pos lsp.Position) uint32 {
-	line := int(pos.Line)
-	char := int(pos.Character)
-
-	offset := uint32(0)
-	for i := 0; i < line; i++ {
-		idx := indexOf(content[offset:], '\n')
-		if idx < 0 {
-			return offset
-		}
-		offset += uint32(idx) + 1
-	}
-
-	currentLineStart := offset
-	currentLineEnd := offset
-	for currentLineEnd < uint32(len(content)) && content[currentLineEnd] != '\n' {
-		currentLineEnd++
-	}
-
-	if char > int(currentLineEnd-currentLineStart) {
-		char = int(currentLineEnd - currentLineStart)
-	}
-
-	return offset + uint32(char)
-}
-
-func indexOf(data []byte, ch byte) int {
-	for i, b := range data {
-		if b == ch {
-			return i
-		}
-	}
-	return -1
-}
-
-func byteOffsetToPosition(content []byte, offset uint32) lsp.Position {
-	line := 0
-	char := 0
-	for i := 0; i < int(offset) && i < len(content); i++ {
-		if content[i] == '\n' {
-			line++
-			char = 0
-		} else {
-			char++
-		}
-	}
-	return lsp.Position{Line: line, Character: char}
-}
-
-func nodeToLocation(node *gotreesitter.Node, uri lsp.DocumentURI) lsp.Location {
-	content := []byte{}
-	return lsp.Location{
-		URI: uri,
-		Range: lsp.Range{
-			Start: byteOffsetToPosition(content, node.StartByte()),
-			End:   byteOffsetToPosition(content, node.EndByte()),
-		},
-	}
-}
-
-func findSmallestNodeAt(node *gotreesitter.Node, offset uint32, lang *gotreesitter.Language) *gotreesitter.Node {
-	if node == nil {
-		return nil
-	}
-
-	if offset < node.StartByte() || offset >= node.EndByte() {
-		return nil
-	}
-
-	for i := 0; i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil && offset >= child.StartByte() && offset < child.EndByte() {
-			smallest := findSmallestNodeAt(child, offset, lang)
-			if smallest != nil {
-				return smallest
-			}
-		}
-	}
-
-	return node
-}
-
-func findDefinition(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, root *gotreesitter.Node) ([]lsp.Location, error) {
+func findDefinition(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, root *gotreesitter.Node, uri lsp.DocumentURI) []lsp.Location {
 	nodeType := node.Type(lang)
-	var locations []lsp.Location
 
 	switch nodeType {
 	case "identifier":
-		parent := node.Parent()
-		if parent != nil {
-			parentType := parent.Type(lang)
-			switch parentType {
-			case "nested_identifier":
-				locations = findNestedIdentifierTarget(node, lang, content, root)
-			case "ui_binding":
-				target := findBindingTarget(node, lang, content, root)
-				if target != nil {
-					locations = append(locations, *target)
-				}
-			case "expression_statement":
-				identifierText := string(content[node.StartByte():node.EndByte()])
-				if identifierText == "parent" {
-					target := findParentObject(node, lang, root)
-					if target != nil {
-						locations = append(locations, lsp.Location{
-							URI: "",
-							Range: lsp.Range{
-								Start: byteOffsetToPosition(content, target.StartByte()),
-								End:   byteOffsetToPosition(content, target.EndByte()),
-							},
-						})
-					}
-				}
-			case "ui_object_definition":
-				locations = findComponentDefinition(node, lang, content, root)
-			case "ui_object_binding":
-				bindingText := string(content[parent.StartByte():parent.EndByte()])
-				idName := extractIdFromBinding(bindingText)
-				if idName != "" {
-					locations = findIdDeclaration(idName, root, lang, content)
-				}
-			}
-		}
-
-	case "property_identifier":
-		locations = findPropertyDefinition(node, lang, content)
-
+		return findIdentifierDefinition(node, lang, content, root, uri)
 	case "ui_object_definition":
-		locations = findComponentDefinition(node, lang, content, root)
+		return findComponentDefinition(node, lang, content, root, uri)
 	}
-
-	return locations, nil
+	return nil
 }
 
-func findNestedIdentifierTarget(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, root *gotreesitter.Node) []lsp.Location {
-	var locations []lsp.Location
+func findIdentifierDefinition(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, root *gotreesitter.Node, uri lsp.DocumentURI) []lsp.Location {
+	parent := node.Parent()
+	if parent == nil {
+		return nil
+	}
 
-	identifierText := string(content[node.StartByte():node.EndByte()])
+	text := string(content[node.StartByte():node.EndByte()])
 
-	if identifierText == "parent" || identifierText == "this" || identifierText == "root" {
-		if parent := findParentObject(node, lang, root); parent != nil {
-			locations = append(locations, lsp.Location{
-				URI: "",
-				Range: lsp.Range{
-					Start: lsp.Position{Line: 0, Character: int(parent.StartByte())},
-					End:   lsp.Position{Line: 0, Character: int(parent.EndByte())},
-				},
-			})
+	switch parent.Type(lang) {
+	case "nested_identifier":
+		if target := findKeywordTarget(text, node, lang, root); target != nil {
+			return []lsp.Location{nodeLocation(uri, content, target)}
+		}
+	case "ui_binding":
+		if target := findKeywordTarget(text, node, lang, root); target != nil {
+			return []lsp.Location{nodeLocation(uri, content, target)}
+		}
+	case "expression_statement":
+		if target := findKeywordTarget(text, node, lang, root); target != nil {
+			return []lsp.Location{nodeLocation(uri, content, target)}
+		}
+	case "ui_object_definition":
+		return findComponentDefinition(node, lang, content, root, uri)
+	case "ui_object_binding":
+		bindingText := string(content[parent.StartByte():parent.EndByte()])
+		if idName := extractIdFromBinding(bindingText); idName != "" {
+			return findIdDeclarations(idName, root, lang, content, uri)
 		}
 	}
-
-	return locations
+	return nil
 }
 
-func findParentObject(node *gotreesitter.Node, lang *gotreesitter.Language, root *gotreesitter.Node) *gotreesitter.Node {
-	current := node.Parent()
-	depth := 0
+// findKeywordTarget resolves implicit QML identifiers (`parent`, `this`,
+// `root`) to their enclosing ui_object_definition.
+func findKeywordTarget(text string, node *gotreesitter.Node, lang *gotreesitter.Language, root *gotreesitter.Node) *gotreesitter.Node {
+	switch text {
+	case "parent", "this", "root":
+		return findEnclosingObject(node, lang)
+	}
+	return nil
+}
 
-	for current != nil && depth < 20 {
+func findEnclosingObject(node *gotreesitter.Node, lang *gotreesitter.Language) *gotreesitter.Node {
+	const maxDepth = 64
+	current := node.Parent()
+	for i := 0; current != nil && i < maxDepth; i++ {
 		if current.Type(lang) == "ui_object_definition" {
 			return current
 		}
 		current = current.Parent()
-		depth++
 	}
-
-	return nil
-}
-
-func findBindingTarget(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, root *gotreesitter.Node) *lsp.Location {
-	identifierText := string(content[node.StartByte():node.EndByte()])
-
-	if identifierText == "parent" {
-		if parent := findParentObject(node, lang, root); parent != nil {
-			return &lsp.Location{
-				URI: "",
-				Range: lsp.Range{
-					Start: byteOffsetToPosition(content, parent.StartByte()),
-					End:   byteOffsetToPosition(content, parent.EndByte()),
-				},
-			}
-		}
-	}
-
 	return nil
 }
 
 func extractIdFromBinding(bindingText string) string {
-	parts := strings.Split(bindingText, ":")
-	if len(parts) >= 2 {
-		idPart := strings.TrimSpace(parts[0])
-		if strings.HasPrefix(idPart, "id:") {
-			return strings.TrimSpace(strings.TrimPrefix(idPart, "id:"))
-		}
+	idx := strings.Index(bindingText, ":")
+	if idx < 0 {
+		return ""
 	}
-	return ""
+	key := strings.TrimSpace(bindingText[:idx])
+	if key != "id" {
+		return ""
+	}
+	return strings.TrimSpace(bindingText[idx+1:])
 }
 
-func findIdDeclaration(idName string, root *gotreesitter.Node, lang *gotreesitter.Language, content []byte) []lsp.Location {
+func findIdDeclarations(idName string, root *gotreesitter.Node, lang *gotreesitter.Language, content []byte, uri lsp.DocumentURI) []lsp.Location {
 	var locations []lsp.Location
-	findIdDeclarationsRecursive(root, lang, content, idName, &locations)
+	walkTree(root, func(n *gotreesitter.Node) bool {
+		if n.Type(lang) != "ui_object_binding" {
+			return true
+		}
+		text := string(content[n.StartByte():n.EndByte()])
+		if extractIdFromBinding(text) == idName {
+			locations = append(locations, nodeLocation(uri, content, n))
+			return false
+		}
+		return true
+	})
 	return locations
 }
 
-func findIdDeclarationsRecursive(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, targetId string, locations *[]lsp.Location) {
+func findComponentDefinition(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, root *gotreesitter.Node, uri lsp.DocumentURI) []lsp.Location {
+	name := string(content[node.StartByte():node.EndByte()])
+	sym, ok := lookupSymbol(name)
+	if !ok || sym.Module == "" {
+		return nil
+	}
+	return findImportForModule(root, lang, content, sym.Module, uri)
+}
+
+func findImportForModule(root *gotreesitter.Node, lang *gotreesitter.Language, content []byte, module string, uri lsp.DocumentURI) []lsp.Location {
+	base := module
+	if idx := strings.Index(module, "."); idx > 0 {
+		base = module[:idx]
+	}
+	var locations []lsp.Location
+	walkTree(root, func(n *gotreesitter.Node) bool {
+		if n.Type(lang) != "ui_import" {
+			return true
+		}
+		if strings.Contains(string(content[n.StartByte():n.EndByte()]), base) {
+			locations = append(locations, nodeLocation(uri, content, n))
+			return false
+		}
+		return true
+	})
+	return locations
+}
+
+// walkTree does a pre-order walk; visit returns false to stop descending into
+// this subtree.
+func walkTree(node *gotreesitter.Node, visit func(*gotreesitter.Node) bool) {
 	if node == nil {
 		return
 	}
-
-	if node.Type(lang) == "ui_object_definition" {
-		for i := 0; i < node.ChildCount(); i++ {
-			child := node.Child(i)
-			if child != nil && child.Type(lang) == "ui_object_binding" {
-				bindingText := string(content[child.StartByte():child.EndByte()])
-				if strings.HasPrefix(strings.TrimSpace(bindingText), "id:") {
-					idPart := strings.TrimSpace(strings.TrimPrefix(bindingText, "id:"))
-					if idPart == targetId {
-						*locations = append(*locations, lsp.Location{
-							URI: "",
-							Range: lsp.Range{
-								Start: byteOffsetToPosition(content, child.StartByte()),
-								End:   byteOffsetToPosition(content, child.EndByte()),
-							},
-						})
-						return
-					}
-				}
-			}
-		}
+	if !visit(node) {
+		return
 	}
-
 	for i := 0; i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil {
-			findIdDeclarationsRecursive(child, lang, content, targetId, locations)
-		}
+		walkTree(node.Child(i), visit)
 	}
-}
-
-func findComponentDefinition(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, root *gotreesitter.Node) []lsp.Location {
-	var locations []lsp.Location
-
-	nodeTypeName := string(content[node.StartByte():node.EndByte()])
-	if info, ok := getTypeInfo(nodeTypeName); ok && info.Module != "" {
-		locations = findImportForModule(root, lang, content, info.Module)
-	}
-
-	return locations
-}
-
-func findImportForModule(root *gotreesitter.Node, lang *gotreesitter.Language, content []byte, module string) []lsp.Location {
-	var locations []lsp.Location
-
-	imports := findUiImports(root, lang)
-	for _, imp := range imports {
-		importText := string(content[imp.StartByte():imp.EndByte()])
-		moduleName := module
-		if idx := strings.Index(module, "."); idx > 0 {
-			moduleName = module[:idx]
-		}
-		if strings.Contains(importText, moduleName) {
-			locations = append(locations, lsp.Location{
-				URI: "",
-				Range: lsp.Range{
-					Start: byteOffsetToPosition(content, imp.StartByte()),
-					End:   byteOffsetToPosition(content, imp.EndByte()),
-				},
-			})
-			return locations
-		}
-	}
-
-	return locations
-}
-
-func findUiImports(node *gotreesitter.Node, lang *gotreesitter.Language) []*gotreesitter.Node {
-	var imports []*gotreesitter.Node
-
-	if node.Type(lang) == "ui_import" {
-		imports = append(imports, node)
-	}
-
-	for i := 0; i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil {
-			imports = append(imports, findUiImports(child, lang)...)
-		}
-	}
-
-	return imports
-}
-
-func findPropertyDefinition(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) []lsp.Location {
-	var locations []lsp.Location
-
-	propertyName := string(content[node.StartByte():node.EndByte()])
-
-	if _, ok := getPropertyInfo(propertyName); ok {
-		return locations
-	}
-
-	return locations
 }

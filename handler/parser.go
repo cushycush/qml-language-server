@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"sync"
 
 	"github.com/odvcencio/gotreesitter"
@@ -71,7 +70,9 @@ func (p *QMLParser) GetTree(uri lsp.DocumentURI) *gotreesitter.Tree {
 }
 
 func (p *QMLParser) GetNodeAt(uri lsp.DocumentURI, pos lsp.Position, content []byte) *gotreesitter.Node {
+	p.mu.RLock()
 	tree, ok := p.trees[uri]
+	p.mu.RUnlock()
 	if !ok {
 		return nil
 	}
@@ -81,52 +82,28 @@ func (p *QMLParser) GetNodeAt(uri lsp.DocumentURI, pos lsp.Position, content []b
 		return nil
 	}
 
-	byteOffset := positionToByteOffset(content, pos)
-	return getNodeAtByte(root, byteOffset)
+	offset := positionToByte(content, pos)
+	// When the cursor sits immediately after the last character of an
+	// identifier (e.g. "foo|") the byte offset equals the node's EndByte.
+	// Bias it one byte left so we still hit the identifier and features like
+	// hover and go-to-definition work at the end of a word.
+	if offset > 0 && offset == uint32(len(content)) {
+		offset--
+	} else if offset > 0 && isWordByte(contentByteAt(content, offset-1)) && !isWordByte(contentByteAt(content, offset)) {
+		offset--
+	}
+	return findSmallestNodeAt(root, offset, nil)
 }
 
-func positionToByteOffset(content []byte, pos lsp.Position) uint32 {
-	line := int(pos.Line)
-	char := int(pos.Character)
-
-	offset := uint32(0)
-	for i := 0; i < line && i < bytes.Count(content, []byte{'\n'}); i++ {
-		idx := bytes.Index(content[offset:], []byte{'\n'})
-		if idx == -1 {
-			return offset
-		}
-		offset += uint32(idx) + 1
+func contentByteAt(content []byte, i uint32) byte {
+	if int(i) >= len(content) {
+		return 0
 	}
-
-	for i := 0; i < char; i++ {
-		if offset+uint32(i) >= uint32(len(content)) {
-			break
-		}
-		if content[offset+uint32(i)] == '\n' {
-			break
-		}
-	}
-
-	return offset + uint32(char)
+	return content[i]
 }
 
-func getNodeAtByte(node *gotreesitter.Node, offset uint32) *gotreesitter.Node {
-	if node == nil {
-		return nil
-	}
-
-	if offset < node.StartByte() || offset >= node.EndByte() {
-		return nil
-	}
-
-	for i := 0; i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil && offset >= child.StartByte() && offset < child.EndByte() {
-			return getNodeAtByte(child, offset)
-		}
-	}
-
-	return node
+func isWordByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_' || b == '$'
 }
 
 type ParseResult struct {

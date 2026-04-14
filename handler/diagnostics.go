@@ -5,28 +5,23 @@ import (
 	"github.com/owenrumney/go-lsp/lsp"
 )
 
-func collectDiagnostics(node *gotreesitter.Node, lang *gotreesitter.Language, diagnostics *[]lsp.Diagnostic) {
-	if node == nil {
-		return
-	}
-
-	if node.Type(lang) == "ERROR" {
-		severity := lsp.SeverityError
-		*diagnostics = append(*diagnostics, lsp.Diagnostic{
-			Range: lsp.Range{
-				Start: lsp.Position{Line: 0, Character: int(node.StartByte())},
-				End:   lsp.Position{Line: 0, Character: int(node.EndByte())},
-			},
-			Severity: &severity,
-			Message:  "Syntax error",
-			Source:   "qml-language-server",
-		})
-	}
-
-	for i := 0; i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil {
-			collectDiagnostics(child, lang, diagnostics)
+// collectDiagnostics walks the tree for ERROR and MISSING nodes and reports
+// them as syntax errors.
+func collectDiagnostics(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, diagnostics *[]lsp.Diagnostic) {
+	walkTree(node, func(n *gotreesitter.Node) bool {
+		if n.IsError() || n.IsMissing() {
+			severity := lsp.SeverityError
+			msg := "Syntax error"
+			if n.IsMissing() {
+				msg = "Missing " + n.Type(lang)
+			}
+			*diagnostics = append(*diagnostics, lsp.Diagnostic{
+				Range:    nodeRange(content, n),
+				Severity: &severity,
+				Message:  msg,
+				Source:   "qml-language-server",
+			})
 		}
-	}
+		return true
+	})
 }

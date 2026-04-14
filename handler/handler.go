@@ -2,8 +2,8 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/odvcencio/gotreesitter"
 	"github.com/owenrumney/go-lsp/lsp"
@@ -11,10 +11,14 @@ import (
 )
 
 type Handler struct {
-	logger    *slog.Logger
+	logger *slog.Logger
+
+	docMu     sync.RWMutex
 	documents map[lsp.DocumentURI]string
+
 	parser    *QMLParser
 	server    *server.Server
+	workspace *workspaceIndex
 }
 
 func New(logger *slog.Logger) *Handler {
@@ -22,6 +26,7 @@ func New(logger *slog.Logger) *Handler {
 		logger:    logger,
 		documents: make(map[lsp.DocumentURI]string),
 		parser:    NewQMLParser(),
+		workspace: newWorkspaceIndex(),
 	}
 }
 
@@ -30,13 +35,37 @@ func (h *Handler) Serve(ctx context.Context) error {
 	return h.server.Run(ctx, server.RunStdio())
 }
 
-func (h *Handler) Initialize(_ context.Context, _ *lsp.InitializeParams) (*lsp.InitializeResult, error) {
+// getDocument returns the current text for uri. Returns "", false when the
+// document isn't open.
+func (h *Handler) getDocument(uri lsp.DocumentURI) (string, bool) {
+	h.docMu.RLock()
+	defer h.docMu.RUnlock()
+	doc, ok := h.documents[uri]
+	return doc, ok
+}
+
+func (h *Handler) setDocument(uri lsp.DocumentURI, text string) {
+	h.docMu.Lock()
+	h.documents[uri] = text
+	h.docMu.Unlock()
+}
+
+func (h *Handler) deleteDocument(uri lsp.DocumentURI) {
+	h.docMu.Lock()
+	delete(h.documents, uri)
+	h.docMu.Unlock()
+}
+
+func (h *Handler) Initialize(_ context.Context, params *lsp.InitializeParams) (*lsp.InitializeResult, error) {
+	if h.workspace != nil {
+		h.workspace.setRoots(workspaceRootsFromInitialize(params))
+		go h.workspace.scan()
+	}
 	return &lsp.InitializeResult{
 		Capabilities: lsp.ServerCapabilities{
 			TextDocumentSync: &lsp.TextDocumentSyncOptions{
 				OpenClose: boolPtr(true),
-				Change:    lsp.SyncIncremental,
-				WillSave:  boolPtr(true),
+				Change:    lsp.SyncFull,
 				Save:      &lsp.SaveOptions{IncludeText: boolPtr(true)},
 			},
 			HoverProvider: boolPtr(true),
@@ -45,34 +74,18 @@ func (h *Handler) Initialize(_ context.Context, _ *lsp.InitializeParams) (*lsp.I
 				TriggerCharacters: []string{".", ":", "<", "\"", "/"},
 			},
 			DefinitionProvider:        boolPtr(true),
-			TypeDefinitionProvider:    boolPtr(true),
 			ReferencesProvider:        boolPtr(true),
 			DocumentSymbolProvider:    boolPtr(true),
-			WorkspaceSymbolProvider:   boolPtr(true),
 			DocumentHighlightProvider: boolPtr(true),
 			SignatureHelpProvider: &lsp.SignatureHelpOptions{
 				TriggerCharacters: []string{"(", ","},
 			},
-			CodeActionProvider: &lsp.CodeActionOptions{
-				ResolveProvider: boolPtr(true),
-			},
+			CodeActionProvider: &lsp.CodeActionOptions{},
 			RenameProvider: &lsp.RenameOptions{
 				PrepareProvider: boolPtr(true),
 			},
-			ExecuteCommandProvider: &lsp.ExecuteCommandOptions{
-				Commands: []string{},
-			},
 			DiagnosticProvider: &lsp.DiagnosticOptions{},
-			SemanticTokensProvider: &lsp.SemanticTokensOptions{
-				Full:  &lsp.SemanticTokensFull{},
-				Range: boolPtr(true),
-			},
-			FoldingRangeProvider:       boolPtr(true),
-			SelectionRangeProvider:     boolPtr(true),
-			CallHierarchyProvider:      boolPtr(true),
-			TypeHierarchyProvider:      boolPtr(true),
-			InlayHintProvider:          &lsp.InlayHintOptions{},
-			LinkedEditingRangeProvider: boolPtr(true),
+			InlayHintProvider:  &lsp.InlayHintOptions{},
 		},
 		ServerInfo: &lsp.ServerInfo{
 			Name:    "qml-language-server",
@@ -81,59 +94,54 @@ func (h *Handler) Initialize(_ context.Context, _ *lsp.InitializeParams) (*lsp.I
 	}, nil
 }
 
-func (h *Handler) Initialized(_ context.Context, _ *lsp.InitializedParams) error {
-	return nil
-}
-
-func (h *Handler) Shutdown(_ context.Context) error {
-	return nil
-}
-
-func (h *Handler) Exit(_ context.Context) error {
-	return nil
-}
+func (h *Handler) Initialized(_ context.Context, _ *lsp.InitializedParams) error { return nil }
+func (h *Handler) Shutdown(_ context.Context) error                              { return nil }
+func (h *Handler) Exit(_ context.Context) error                                  { return nil }
 
 func (h *Handler) publishDiagnostics(uri lsp.DocumentURI, diagnostics []lsp.Diagnostic) {
-	if h.server != nil && h.server.Client != nil {
-		ctx := context.Background()
-		if diagnostics == nil {
-			diagnostics = []lsp.Diagnostic{}
-		}
-		h.server.Client.PublishDiagnostics(ctx, &lsp.PublishDiagnosticsParams{
-			URI:         uri,
-			Diagnostics: diagnostics,
-		})
+	if h.server == nil || h.server.Client == nil {
+		return
 	}
+	if diagnostics == nil {
+		diagnostics = []lsp.Diagnostic{}
+	}
+	h.server.Client.PublishDiagnostics(context.Background(), &lsp.PublishDiagnosticsParams{
+		URI:         uri,
+		Diagnostics: diagnostics,
+	})
 }
 
-func (h *Handler) DidOpen(ctx context.Context, params *lsp.DidOpenTextDocumentParams) error {
-	h.documents[params.TextDocument.URI] = params.TextDocument.Text
-	if h.parser != nil {
-		h.parser.Parse(params.TextDocument.URI, params.TextDocument.Text)
-		h.publishDiagnostics(params.TextDocument.URI, h.getDiagnostics(params.TextDocument.URI))
+func (h *Handler) reparseAndPublish(uri lsp.DocumentURI, text string) {
+	if h.parser == nil {
+		return
+	}
+	h.parser.Parse(uri, text)
+	h.publishDiagnostics(uri, h.getDiagnostics(uri))
+}
+
+func (h *Handler) DidOpen(_ context.Context, params *lsp.DidOpenTextDocumentParams) error {
+	h.setDocument(params.TextDocument.URI, params.TextDocument.Text)
+	h.reparseAndPublish(params.TextDocument.URI, params.TextDocument.Text)
+	if h.workspace != nil {
+		h.workspace.registerURI(params.TextDocument.URI)
 	}
 	return nil
-}
-
-func (h *Handler) logf(format string, args ...any) {
-	if h.logger != nil {
-		h.logger.Info(fmt.Sprintf(format, args...))
-	}
 }
 
 func (h *Handler) DidChange(_ context.Context, params *lsp.DidChangeTextDocumentParams) error {
-	for _, change := range params.ContentChanges {
-		h.documents[params.TextDocument.URI] = change.Text
+	// With Change: SyncFull the last change carries the full document. Earlier
+	// entries are dropped in the same spirit as the previous code.
+	if len(params.ContentChanges) == 0 {
+		return nil
 	}
-	if h.parser != nil {
-		h.parser.Parse(params.TextDocument.URI, h.documents[params.TextDocument.URI])
-		h.publishDiagnostics(params.TextDocument.URI, h.getDiagnostics(params.TextDocument.URI))
-	}
+	text := params.ContentChanges[len(params.ContentChanges)-1].Text
+	h.setDocument(params.TextDocument.URI, text)
+	h.reparseAndPublish(params.TextDocument.URI, text)
 	return nil
 }
 
 func (h *Handler) DidClose(_ context.Context, params *lsp.DidCloseTextDocumentParams) error {
-	delete(h.documents, params.TextDocument.URI)
+	h.deleteDocument(params.TextDocument.URI)
 	if h.parser != nil {
 		h.parser.Invalidate(params.TextDocument.URI)
 	}
@@ -142,31 +150,31 @@ func (h *Handler) DidClose(_ context.Context, params *lsp.DidCloseTextDocumentPa
 }
 
 func (h *Handler) DidSave(_ context.Context, params *lsp.DidSaveTextDocumentParams) error {
-	if params.Text != nil {
-		h.documents[params.TextDocument.URI] = *params.Text
+	if params.Text == nil {
+		return nil
 	}
-	if h.parser != nil {
-		h.parser.Parse(params.TextDocument.URI, h.documents[params.TextDocument.URI])
-		h.publishDiagnostics(params.TextDocument.URI, h.getDiagnostics(params.TextDocument.URI))
-	}
+	h.setDocument(params.TextDocument.URI, *params.Text)
+	h.reparseAndPublish(params.TextDocument.URI, *params.Text)
 	return nil
 }
 
-func (h *Handler) DidChangeWatchedFiles(_ context.Context, params *lsp.DidChangeWatchedFilesParams) error {
+func (h *Handler) DidChangeWatchedFiles(_ context.Context, _ *lsp.DidChangeWatchedFilesParams) error {
+	if h.workspace != nil {
+		go h.workspace.scan()
+	}
 	return nil
 }
 
 func (h *Handler) DocumentHighlight(_ context.Context, params *lsp.DocumentHighlightParams) ([]lsp.DocumentHighlight, error) {
-	doc, ok := h.documents[params.TextDocument.URI]
+	uri := params.TextDocument.URI
+	doc, ok := h.getDocument(uri)
 	if !ok || h.parser == nil {
 		return nil, nil
 	}
-
-	tree := h.parser.GetTree(params.TextDocument.URI)
+	tree := h.parser.GetTree(uri)
 	if tree == nil {
 		return nil, nil
 	}
-
 	root := tree.RootNode()
 	if root == nil {
 		return nil, nil
@@ -174,46 +182,20 @@ func (h *Handler) DocumentHighlight(_ context.Context, params *lsp.DocumentHighl
 
 	lang := h.parser.Language()
 	content := []byte(doc)
-	pos := params.Position
-
-	byteOffset := positionToByte(content, pos)
-	node := findSmallestNodeAt(root, byteOffset, lang)
-
+	node := h.parser.GetNodeAt(uri, params.Position, content)
 	if node == nil || node.Type(lang) != "identifier" {
 		return nil, nil
 	}
-
-	identifierText := string(content[node.StartByte():node.EndByte()])
+	target := string(content[node.StartByte():node.EndByte()])
 
 	var highlights []lsp.DocumentHighlight
-	collectHighlights(root, lang, content, identifierText, &highlights)
-
+	walkTree(root, func(n *gotreesitter.Node) bool {
+		if n.Type(lang) == "identifier" && string(content[n.StartByte():n.EndByte()]) == target {
+			highlights = append(highlights, lsp.DocumentHighlight{Range: nodeRange(content, n)})
+		}
+		return true
+	})
 	return highlights, nil
-}
-
-func collectHighlights(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, target string, highlights *[]lsp.DocumentHighlight) {
-	if node == nil {
-		return
-	}
-
-	if node.Type(lang) == "identifier" {
-		nodeText := string(content[node.StartByte():node.EndByte()])
-		if nodeText == target {
-			*highlights = append(*highlights, lsp.DocumentHighlight{
-				Range: lsp.Range{
-					Start: byteOffsetToPosition(content, node.StartByte()),
-					End:   byteOffsetToPosition(content, node.EndByte()),
-				},
-			})
-		}
-	}
-
-	for i := 0; i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil {
-			collectHighlights(child, lang, content, target, highlights)
-		}
-	}
 }
 
 func (h *Handler) DocumentDiagnostic(_ context.Context, params *lsp.DocumentDiagnosticParams) (any, error) {
@@ -221,26 +203,23 @@ func (h *Handler) DocumentDiagnostic(_ context.Context, params *lsp.DocumentDiag
 	if diagnostics == nil {
 		diagnostics = []lsp.Diagnostic{}
 	}
-	return lsp.FullDocumentDiagnosticReport{
-		Items: diagnostics,
-	}, nil
+	return lsp.FullDocumentDiagnosticReport{Items: diagnostics}, nil
 }
 
 func (h *Handler) getDiagnostics(uri lsp.DocumentURI) []lsp.Diagnostic {
 	if h.parser == nil {
 		return nil
 	}
-
 	tree := h.parser.GetTree(uri)
 	if tree == nil {
 		return nil
 	}
-
-	lang := h.parser.Language()
+	doc, ok := h.getDocument(uri)
+	if !ok {
+		return nil
+	}
 	var diagnostics []lsp.Diagnostic
-
-	collectDiagnostics(tree.RootNode(), lang, &diagnostics)
-
+	collectDiagnostics(tree.RootNode(), h.parser.Language(), []byte(doc), &diagnostics)
 	return diagnostics
 }
 
