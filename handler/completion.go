@@ -53,6 +53,7 @@ func (h *Handler) Completion(_ context.Context, params *lsp.CompletionParams) (*
 		items = append(items, h.workspaceCompletions()...)
 		items = append(items, qmlKeywords()...)
 		items = append(items, completionItemsByCategory("js")...)
+		items = append(items, completionItemsByCategory("quickshell-snippet")...)
 	}
 
 	return &lsp.CompletionList{

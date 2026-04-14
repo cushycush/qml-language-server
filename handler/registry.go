@@ -43,6 +43,8 @@ func (s QMLSymbol) Render() string {
 		b.WriteString(fmt.Sprintf("**%s** — JavaScript", header))
 	case "workspace":
 		b.WriteString(fmt.Sprintf("**%s** — workspace component", header))
+	case "quickshell-snippet":
+		b.WriteString(fmt.Sprintf("**%s** — snippet", header))
 	default:
 		b.WriteString(fmt.Sprintf("**%s**", header))
 	}
@@ -141,6 +143,7 @@ func init() {
 	registerKeywords()
 	registerImports()
 	registerJSBuiltins()
+	registerQuickshellBuiltins()
 }
 
 func registerBuiltinTypes() {
