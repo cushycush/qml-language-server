@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"os"
 	"sync"
 
 	"github.com/odvcencio/gotreesitter"
@@ -32,6 +34,21 @@ func New(logger *slog.Logger) *Handler {
 
 func (h *Handler) Serve(ctx context.Context) error {
 	h.server = server.NewServer(h)
+	// Override go-lsp's built-in shutdown handler: its default returns untyped
+	// nil, which makes the response omit `result` entirely, and Neovim rejects
+	// that as INVALID_SERVER_MESSAGE. LSP requires `result: null` explicitly.
+	h.server.HandleMethod("shutdown", func(ctx context.Context, _ json.RawMessage) (any, error) {
+		_ = h.Shutdown(ctx)
+		return json.RawMessage("null"), nil
+	})
+	// go-lsp's dispatcher ignores errors from notification handlers, so the
+	// library's built-in `exit` handler never actually terminates. Without
+	// this override the process only exits on stdin EOF, causing the editor
+	// to block on its shutdown timeout.
+	h.server.HandleNotification("exit", func(context.Context, json.RawMessage) error {
+		os.Exit(0)
+		return nil
+	})
 	return h.server.Run(ctx, server.RunStdio())
 }
 

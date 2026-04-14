@@ -40,18 +40,28 @@ func (h *Handler) Hover(_ context.Context, params *lsp.HoverParams) (*lsp.Hover,
 
 func ptrRange(r lsp.Range) *lsp.Range { return &r }
 
-// hoverBody produces markdown for the node under the cursor, or "" to tell
-// the caller there's nothing useful to show.
+// hoverBody produces markdown for the node under the cursor. If nothing
+// specific matches, we walk up to the nearest identifier-bearing ancestor so
+// cursor positions on punctuation ({, :, ., etc.) still produce useful docs.
 func hoverBody(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) string {
 	nodeText := string(content[node.StartByte():node.EndByte()])
 
 	switch node.Type(lang) {
-	case "identifier", "property_identifier", "nested_identifier":
+	case "identifier", "property_identifier", "nested_identifier", "type_identifier", "shorthand_property_identifier":
 		return identifierHover(nodeText, node, lang, content)
 	case "ui_object_definition":
 		return typeHoverOrGeneric(extractObjectType(node, lang, content))
 	case "ui_import":
 		return "**QML import**\n\n```qml\n" + nodeText + "\n```"
+	case "ui_binding", "ui_property":
+		// The cursor is somewhere on the line (could be on ':'). Try the
+		// first identifier child, which is the property name.
+		if name := firstIdentifierText(node, lang, content); name != "" {
+			if sym, ok := lookupSymbol(name); ok {
+				return sym.Render()
+			}
+			return "**Property:** `" + name + "`"
+		}
 	case "string", "string_fragment":
 		return "**String literal**\n\n```\n" + nodeText + "\n```"
 	case "number":
@@ -59,9 +69,41 @@ func hoverBody(node *gotreesitter.Node, lang *gotreesitter.Language, content []b
 	case "comment":
 		return "**Comment**\n\n" + nodeText
 	}
-	// Unknown node — still try a registry lookup on its text.
+	// Direct registry lookup on the node text (handles bare keywords).
 	if sym, ok := lookupSymbol(nodeText); ok {
 		return sym.Render()
+	}
+	// Walk up to find an ancestor we recognize.
+	for anc := node.Parent(); anc != nil; anc = anc.Parent() {
+		switch anc.Type(lang) {
+		case "ui_object_definition":
+			return typeHoverOrGeneric(extractObjectType(anc, lang, content))
+		case "ui_binding", "ui_property":
+			if name := firstIdentifierText(anc, lang, content); name != "" {
+				if sym, ok := lookupSymbol(name); ok {
+					return sym.Render()
+				}
+				return "**Property:** `" + name + "`"
+			}
+		case "ui_import":
+			return "**QML import**\n\n```qml\n" + string(content[anc.StartByte():anc.EndByte()]) + "\n```"
+		}
+	}
+	return ""
+}
+
+// firstIdentifierText returns the text of the first direct `identifier` child
+// of node, or "" if none exists.
+func firstIdentifierText(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) string {
+	for i := 0; i < node.ChildCount(); i++ {
+		c := node.Child(i)
+		if c == nil {
+			continue
+		}
+		t := c.Type(lang)
+		if t == "identifier" || t == "property_identifier" || t == "type_identifier" {
+			return string(content[c.StartByte():c.EndByte()])
+		}
 	}
 	return ""
 }

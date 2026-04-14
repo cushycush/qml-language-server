@@ -1,4 +1,4 @@
-.PHONY: build test lint clean docker docker-run
+.PHONY: build test lint clean docker docker-run gen-grammar
 
 BINARY_NAME=qml-language-server
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -6,6 +6,12 @@ BUILD_FLAGS=-ldflags="-s -w -X main.version=$(VERSION)"
 
 build:
 	go build $(BUILD_FLAGS) -o $(BINARY_NAME) .
+
+# Regenerate the prebuilt grammar blob. Run after editing qmljs.grammar.json.
+# Takes ~12s (grammargen is slow); the blob it produces is why startup is
+# milliseconds instead of seconds.
+gen-grammar:
+	go run ./grammars/internal/gen
 
 test:
 	go test -v -race ./...
