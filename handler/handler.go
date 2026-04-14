@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/odvcencio/gotreesitter"
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/owenrumney/go-lsp/server"
 )
@@ -153,6 +154,76 @@ func (h *Handler) DidSave(_ context.Context, params *lsp.DidSaveTextDocumentPara
 
 func (h *Handler) DidChangeWatchedFiles(_ context.Context, params *lsp.DidChangeWatchedFilesParams) error {
 	return nil
+}
+
+func (h *Handler) DocumentHighlight(_ context.Context, params *lsp.DocumentHighlightParams) ([]lsp.DocumentHighlight, error) {
+	doc, ok := h.documents[params.TextDocument.URI]
+	if !ok || h.parser == nil {
+		return nil, nil
+	}
+
+	tree := h.parser.GetTree(params.TextDocument.URI)
+	if tree == nil {
+		return nil, nil
+	}
+
+	root := tree.RootNode()
+	if root == nil {
+		return nil, nil
+	}
+
+	lang := h.parser.Language()
+	content := []byte(doc)
+	pos := params.Position
+
+	byteOffset := positionToByte(content, pos)
+	node := findSmallestNodeAt(root, byteOffset, lang)
+
+	if node == nil || node.Type(lang) != "identifier" {
+		return nil, nil
+	}
+
+	identifierText := string(content[node.StartByte():node.EndByte()])
+
+	var highlights []lsp.DocumentHighlight
+	collectHighlights(root, lang, content, identifierText, &highlights)
+
+	return highlights, nil
+}
+
+func collectHighlights(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, target string, highlights *[]lsp.DocumentHighlight) {
+	if node == nil {
+		return
+	}
+
+	if node.Type(lang) == "identifier" {
+		nodeText := string(content[node.StartByte():node.EndByte()])
+		if nodeText == target {
+			*highlights = append(*highlights, lsp.DocumentHighlight{
+				Range: lsp.Range{
+					Start: byteOffsetToPosition(content, node.StartByte()),
+					End:   byteOffsetToPosition(content, node.EndByte()),
+				},
+			})
+		}
+	}
+
+	for i := 0; i < node.ChildCount(); i++ {
+		child := node.Child(i)
+		if child != nil {
+			collectHighlights(child, lang, content, target, highlights)
+		}
+	}
+}
+
+func (h *Handler) DocumentDiagnostic(_ context.Context, params *lsp.DocumentDiagnosticParams) (any, error) {
+	diagnostics := h.getDiagnostics(params.TextDocument.URI)
+	if diagnostics == nil {
+		diagnostics = []lsp.Diagnostic{}
+	}
+	return lsp.FullDocumentDiagnosticReport{
+		Items: diagnostics,
+	}, nil
 }
 
 func (h *Handler) getDiagnostics(uri lsp.DocumentURI) []lsp.Diagnostic {

@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/odvcencio/gotreesitter"
-	"github.com/odvcencio/gotreesitter/grammars"
 	"github.com/owenrumney/go-lsp/lsp"
+	qmlgrammars "qml-language-server/grammars"
 )
 
 type QMLParser struct {
@@ -17,8 +17,8 @@ type QMLParser struct {
 }
 
 func NewQMLParser() *QMLParser {
-	lang := grammars.QmljsLanguage()
-	if lang == nil {
+	lang, err := qmlgrammars.QmljsLanguage()
+	if err != nil || lang == nil {
 		return nil
 	}
 	return &QMLParser{
