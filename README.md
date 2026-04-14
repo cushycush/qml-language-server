@@ -5,11 +5,12 @@ A Go-based Language Server for QML (Qt Meta-Object Language) that provides intel
 ## Features
 
 ### Core Language Features
-- **QML Parsing** - Powered by [gotreesitter](https://github.com/odvcencio/gotreesitter) with tree-sitter-qmljs grammar
-- **Incremental Parsing** - Efficient document changes
+- **Pure-Go Parser** - Powered by [gotreesitter](https://github.com/odvcencio/gotreesitter) with an embedded tree-sitter-qmljs grammar; no CGO, no external tree-sitter install
+- **Incremental Parsing** - Reparses only the affected regions on each `didChange`
+- **Workspace Indexing** - Scans the project on startup to resolve cross-file symbols, imports, and IDs
 
 ### LSP Features
-- **Hover** - Type documentation and property info
+- **Hover** - Type documentation, property info, and signal/method details with fallbacks through the workspace index
 - **Completions** - Context-aware completions for:
   - QML types (QtQuick, QtQml, QtQuick.Controls)
   - Imports (`import QtQuick 2.0`)
@@ -17,46 +18,47 @@ A Go-based Language Server for QML (Qt Meta-Object Language) that provides intel
   - Signal handlers (`onClicked`, `onPressed`, etc.)
   - Values (`true`, `false`, colors, `parent`, `this`)
   - Anchor completions (`fill`, `centerIn`, `top`, `bottom`, etc.)
-- **Go to Definition** - Find identifier definitions
+  - Quickshell types, imports, singletons, and boilerplate snippets
+- **Go to Definition** - Jump to identifier definitions across the workspace
 - **Find References** - Find all uses of an identifier
-- **Diagnostics** - Parse error highlighting
+- **Diagnostics** - Parse error highlighting from tree-sitter
 - **Document Symbols** - File outline with hierarchical structure
 - **Code Actions** - Quick fixes
-- **Rename** - Rename identifiers across document
+- **Rename** - Rename identifiers across a document
 - **Signature Help** - Function parameter hints for:
   - `Qt.rect()`, `Qt.size()`, `Qt.point()`
   - `console.log()`, `console.warn()`, `console.error()`
   - `String()`, `Number()`, `Boolean()`
 - **Inlay Hints** - Property name annotations
 
-### Documentation
-Built-in documentation for 30+ QtQuick types including:
-- Item, Rectangle, Text, Image, MouseArea
-- Layout types (Column, Row, Grid, ColumnLayout, RowLayout, GridLayout)
-- List types (ListView, ListModel, ListElement)
-- Animation types (PropertyAnimation, NumberAnimation, ColorAnimation)
-- State types (State, PropertyChanges, Transition)
-- And more...
+### Documentation Registry
+Built-in documentation for QtQuick, QtQml, QtQuick.Controls, QtQuick.Layouts, and Quickshell:
+- Core items: Item, Rectangle, Text, Image, MouseArea, Flickable, Loader, Repeater
+- Layouts: Column, Row, Grid, ColumnLayout, RowLayout, GridLayout
+- Models & views: ListView, GridView, ListModel, ListElement
+- Animations: PropertyAnimation, NumberAnimation, ColorAnimation, Behavior, Transition
+- States: State, PropertyChanges, StateGroup
+- Quickshell: PanelWindow, FloatingWindow, PopupWindow, Scope, Variants, Process, FileView, WlrLayershell, Hyprland singletons, and more
 
 ## Installation
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.26.1+
 - A code editor with LSP support (VS Code, Neovim, etc.)
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/yourusername/qml-language-server.git
+git clone https://github.com/cushycush/qml-language-server.git
 cd qml-language-server
-go build -o qml-language-server .
+make build
 ```
 
-### Using Go Install
+`make install` will build the binary and copy it to `~/.local/bin`.
 
-```bash
-go install github.com/yourusername/qml-language-server@latest
-```
+### Prebuilt Binaries
+
+Download the latest release for your platform from the [Releases page](https://github.com/cushycush/qml-language-server/releases).
 
 ## Editor Configuration
 
@@ -194,25 +196,34 @@ vim.lsp.enable("qml")
 
 ```
 qml-language-server/
-├── main.go              # Entry point
+├── main.go                 # Entry point
 ├── handler/
-│   ├── handler.go       # Main LSP handler
-│   ├── hover.go         # Hover provider
-│   ├── completion.go    # Completion provider
-│   ├── definition.go     # Go to definition
-│   ├── references.go     # Find references
-│   ├── diagnostics.go    # Parse error diagnostics
-│   ├── symbols.go       # Document symbols
-│   ├── codeactions.go   # Quick fixes
-│   ├── rename.go        # Rename refactoring
-│   ├── signature.go     # Function signatures
-│   ├── inlayhints.go    # Inlay annotations
-│   ├── parser.go         # Tree-sitter integration
-│   ├── types.go         # QML type info
-│   ├── errors.go        # Error handling
-│   └── handler_test.go  # Unit tests
-├── .github/
-│   └── workflows/       # CI/CD workflows
+│   ├── handler.go          # LSP handler + capability registration
+│   ├── hover.go            # Hover provider
+│   ├── completion.go       # Completion provider
+│   ├── definition.go       # Go to definition
+│   ├── references.go       # Find references
+│   ├── diagnostics.go      # Parse error diagnostics
+│   ├── symbols.go          # Document symbols
+│   ├── codeactions.go      # Quick fixes
+│   ├── rename.go           # Rename refactoring
+│   ├── signature.go        # Signature help
+│   ├── inlayhints.go       # Inlay annotations
+│   ├── parser.go           # Tree-sitter integration
+│   ├── positions.go        # LSP <-> byte-offset helpers
+│   ├── workspace.go        # Workspace symbol index
+│   ├── registry.go         # Documentation registry
+│   ├── quickshell.go       # Quickshell types, imports, snippets
+│   ├── types.go            # QML type info
+│   ├── errors.go           # Error helpers
+│   └── handler_test.go     # Unit tests
+├── grammars/
+│   ├── loader.go           # Grammar loader + scanner wiring
+│   ├── qmljs.grammar.json  # Tree-sitter grammar
+│   ├── qmljs_scanner.go    # Go port of the external scanner
+│   ├── grammar_blobs/      # Cached generated language blob
+│   └── queries/            # Highlights + locals queries
+├── .github/workflows/      # CI/CD
 └── README.md
 ```
 
