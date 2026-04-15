@@ -14,7 +14,7 @@ func (h *Handler) Completion(_ context.Context, params *lsp.CompletionParams) (*
 		return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
 	}
 
-	pos := params.TextDocumentPositionParams.Position
+	pos := params.Position
 	line := int(pos.Line)
 	char := int(pos.Character)
 

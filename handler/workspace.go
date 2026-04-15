@@ -128,13 +128,6 @@ func (w *workspaceIndex) all() []workspaceComponent {
 	return out
 }
 
-func (w *workspaceIndex) lookup(name string) (workspaceComponent, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	c, ok := w.byName[name]
-	return c, ok
-}
-
 func shouldSkipDir(name string) bool {
 	switch name {
 	case ".git", ".hg", ".svn", "node_modules", "build", "build-debug", "build-release",

@@ -122,7 +122,7 @@ func (h *Handler) publishDiagnostics(uri lsp.DocumentURI, diagnostics []lsp.Diag
 	if diagnostics == nil {
 		diagnostics = []lsp.Diagnostic{}
 	}
-	h.server.Client.PublishDiagnostics(context.Background(), &lsp.PublishDiagnosticsParams{
+	_ = h.server.Client.PublishDiagnostics(context.Background(), &lsp.PublishDiagnosticsParams{
 		URI:         uri,
 		Diagnostics: diagnostics,
 	})

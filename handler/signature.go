@@ -109,9 +109,10 @@ func findActiveCall(line string, cursor int) (string, int) {
 			continue
 		}
 		if inString != 0 {
-			if c == '\\' {
+			switch c {
+			case '\\':
 				escape = true
-			} else if c == inString {
+			case inString:
 				inString = 0
 			}
 			continue
@@ -161,7 +162,6 @@ func plainText(s string) *lsp.MarkupContent {
 	return &lsp.MarkupContent{Kind: lsp.PlainText, Value: s}
 }
 
-// countParams and stringPtr are preserved for the existing tests.
 func countParams(text string) int {
 	count := 0
 	inString := byte(0)
@@ -173,9 +173,10 @@ func countParams(text string) int {
 			continue
 		}
 		if inString != 0 {
-			if c == '\\' {
+			switch c {
+			case '\\':
 				escape = true
-			} else if c == inString {
+			case inString:
 				inString = 0
 			}
 			continue
@@ -190,4 +191,3 @@ func countParams(text string) int {
 	return count
 }
 
-func stringPtr(s string) *lsp.MarkupContent { return plainText(s) }

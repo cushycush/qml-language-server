@@ -103,7 +103,7 @@ func loadGeneratedLanguage() (*gotreesitter.Language, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	var lang gotreesitter.Language
 	if err := gob.NewDecoder(gzr).Decode(&lang); err != nil {
@@ -117,7 +117,7 @@ func decodeLanguageBlob(data []byte) (*gotreesitter.Language, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	dec := gob.NewDecoder(gzr)
 	var lang gotreesitter.Language

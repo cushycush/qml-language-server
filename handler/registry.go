@@ -30,26 +30,26 @@ func (s QMLSymbol) Render() string {
 	header := s.Label
 	switch s.Category {
 	case "type":
-		b.WriteString(fmt.Sprintf("**%s** — type", header))
+		fmt.Fprintf(&b, "**%s** — type", header)
 	case "property":
-		b.WriteString(fmt.Sprintf("**%s** — property", header))
+		fmt.Fprintf(&b, "**%s** — property", header)
 	case "keyword":
-		b.WriteString(fmt.Sprintf("**%s** — keyword", header))
+		fmt.Fprintf(&b, "**%s** — keyword", header)
 	case "import":
-		b.WriteString(fmt.Sprintf("**%s** — module", header))
+		fmt.Fprintf(&b, "**%s** — module", header)
 	case "anchor":
-		b.WriteString(fmt.Sprintf("**%s** — anchor", header))
+		fmt.Fprintf(&b, "**%s** — anchor", header)
 	case "js":
-		b.WriteString(fmt.Sprintf("**%s** — JavaScript", header))
+		fmt.Fprintf(&b, "**%s** — JavaScript", header)
 	case "workspace":
-		b.WriteString(fmt.Sprintf("**%s** — workspace component", header))
+		fmt.Fprintf(&b, "**%s** — workspace component", header)
 	case "quickshell-snippet":
-		b.WriteString(fmt.Sprintf("**%s** — snippet", header))
+		fmt.Fprintf(&b, "**%s** — snippet", header)
 	default:
-		b.WriteString(fmt.Sprintf("**%s**", header))
+		fmt.Fprintf(&b, "**%s**", header)
 	}
 	if s.Module != "" {
-		b.WriteString(fmt.Sprintf("  \n_%s_", s.Module))
+		fmt.Fprintf(&b, "  \n_%s_", s.Module)
 	}
 	b.WriteString("\n\n")
 

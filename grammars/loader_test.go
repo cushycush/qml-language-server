@@ -1,7 +1,6 @@
 package qmlgrammars
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/odvcencio/gotreesitter"
@@ -1023,19 +1022,4 @@ func TestQmljsParseJsxText(t *testing.T) {
 	root := tree.RootNode()
 	require.NotNil(t, root)
 	require.NotEqual(t, "ERROR", root.Type(lang))
-}
-
-func containsErrorNode(node *gotreesitter.Node, lang *gotreesitter.Language) bool {
-	if node == nil {
-		return false
-	}
-	if strings.Contains(node.Type(lang), "ERROR") {
-		return true
-	}
-	for i := 0; i < node.ChildCount(); i++ {
-		if containsErrorNode(node.Child(i), lang) {
-			return true
-		}
-	}
-	return false
 }

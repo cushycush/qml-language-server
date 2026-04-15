@@ -37,24 +37,6 @@ func newHandlerError(code, message string, err error) *HandlerError {
 	}
 }
 
-func (h *Handler) logError(err error, context string) {
-	if h.logger != nil {
-		h.logger.Error(context, "error", err)
-	}
-}
-
-func (h *Handler) logWarning(msg string, args ...any) {
-	if h.logger != nil {
-		h.logger.Warn(msg, args...)
-	}
-}
-
-func (h *Handler) logInfo(msg string, args ...any) {
-	if h.logger != nil {
-		h.logger.Info(msg, args...)
-	}
-}
-
 func safeString(s string) string {
 	if s == "" {
 		return "<empty>"
