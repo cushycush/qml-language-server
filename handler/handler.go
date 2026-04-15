@@ -107,6 +107,7 @@ func (h *Handler) Initialize(_ context.Context, params *lsp.InitializeParams) (*
 				Legend: SemanticTokensLegend(),
 				Full:   &lsp.SemanticTokensFull{},
 			},
+			WorkspaceSymbolProvider: boolPtr(true),
 		},
 		ServerInfo: &lsp.ServerInfo{
 			Name:    "qml-language-server",
