@@ -258,6 +258,57 @@ func TestCompletionPopulatesDocumentation(t *testing.T) {
 	}
 }
 
+func TestCompletionOffersPropertiesInsideObjectBody(t *testing.T) {
+	cases := []struct {
+		name     string
+		doc      string
+		position lsp.Position
+	}{
+		{
+			name:     "blank line inside Window",
+			doc:      "import QtQuick\n\nWindow {\n    \n}\n",
+			position: lsp.Position{Line: 3, Character: 4},
+		},
+		{
+			name:     "blank line inside Text",
+			doc:      "import QtQuick\n\nText {\n    \n}\n",
+			position: lsp.Position{Line: 3, Character: 4},
+		},
+		{
+			name:     "mid-word inside Rectangle",
+			doc:      "import QtQuick\n\nRectangle {\n    w\n}\n",
+			position: lsp.Position{Line: 3, Character: 5},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(t, "test://foo.qml", tc.doc)
+			list, err := h.Completion(context.Background(), &lsp.CompletionParams{
+				TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+					TextDocument: lsp.TextDocumentIdentifier{URI: "test://foo.qml"},
+					Position:     tc.position,
+				},
+			})
+			if err != nil {
+				t.Fatalf("Completion returned error: %v", err)
+			}
+			if list == nil {
+				t.Fatal("Completion returned nil list")
+			}
+			labels := map[string]bool{}
+			for _, item := range list.Items {
+				labels[item.Label] = true
+			}
+			for _, want := range []string{"width", "height", "anchors"} {
+				if !labels[want] {
+					t.Errorf("expected %q in completions; got %d items", want, len(list.Items))
+				}
+			}
+		})
+	}
+}
+
 func newTestHandler(t *testing.T, uri lsp.DocumentURI, text string) *Handler {
 	t.Helper()
 	h := New(nil)

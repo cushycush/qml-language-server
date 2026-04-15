@@ -73,6 +73,12 @@ func getContextCompletions(node *gotreesitter.Node, lang *gotreesitter.Language,
 	case "ui_object_definition":
 		items = append(items, getCompletionTypes()...)
 
+	case "ui_object_initializer":
+		// Cursor sits on a blank line inside `Foo { ... }`. Both new child
+		// objects and property bindings are valid here, so offer types,
+		// properties, and the property-declaration keywords.
+		items = append(items, objectBodyCompletions()...)
+
 	case "ui_binding":
 		items = append(items, qmlPropertyCompletions()...)
 
@@ -91,6 +97,14 @@ func getContextCompletions(node *gotreesitter.Node, lang *gotreesitter.Language,
 			parentType := parent.Type(lang)
 			if parentType == "ui_object_definition" || parentType == "ui_required" || parentType == "ui_property" {
 				items = append(items, getCompletionTypes()...)
+			}
+			// While the user is mid-word inside an object body the partial
+			// identifier shows up under an ERROR (the binding `name:` hasn't
+			// been typed yet) and tree-sitter often unwinds the whole file to
+			// a single ERROR. Confirm we're still inside a body before
+			// offering the same completions as the blank-line case.
+			if (parentType == "ERROR" || parentType == "ui_object_initializer") && isInsideObjectBody(node, lang, content) {
+				items = append(items, objectBodyCompletions()...)
 			}
 		}
 
@@ -228,6 +242,86 @@ func trimLeadingWhitespace(s string) string {
 	for ; i < len(s) && (s[i] == ' ' || s[i] == '\t'); i++ {
 	}
 	return s[i:]
+}
+
+// objectBodyCompletions is the set of items valid directly inside a
+// `Foo { ... }` body: properties, child types, and property-declaration
+// keywords (`property`, `readonly property`, `signal`, ...).
+func objectBodyCompletions() []lsp.CompletionItem {
+	items := qmlPropertyCompletions()
+	items = append(items, getCompletionTypes()...)
+	items = append(items, qmlKeywords()...)
+	return items
+}
+
+// isInsideObjectBody returns true if `node` sits inside a `Foo { ... }`
+// body. Walks ancestors first, then falls back to a brace-balance scan
+// because tree-sitter often collapses the whole document to ERROR while
+// the user is mid-word.
+func isInsideObjectBody(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) bool {
+	for n := node.Parent(); n != nil; n = n.Parent() {
+		if n.Type(lang) == "ui_object_initializer" {
+			return true
+		}
+	}
+	return openBraceDepthBefore(content, node.StartByte()) > 0
+}
+
+// openBraceDepthBefore counts unmatched `{`s in `content[:end]`, ignoring
+// braces inside string literals and comments.
+func openBraceDepthBefore(content []byte, end uint32) int {
+	if int(end) > len(content) {
+		end = uint32(len(content))
+	}
+	depth := 0
+	inLineComment := false
+	inBlockComment := false
+	inString := false
+	var quote byte
+	for i := uint32(0); i < end; i++ {
+		c := content[i]
+		switch {
+		case inLineComment:
+			if c == '\n' {
+				inLineComment = false
+			}
+		case inBlockComment:
+			if c == '*' && i+1 < end && content[i+1] == '/' {
+				inBlockComment = false
+				i++
+			}
+		case inString:
+			if c == '\\' && i+1 < end {
+				i++
+				continue
+			}
+			if c == quote {
+				inString = false
+			}
+		default:
+			switch c {
+			case '"', '\'', '`':
+				inString = true
+				quote = c
+			case '/':
+				if i+1 < end {
+					switch content[i+1] {
+					case '/':
+						inLineComment = true
+						i++
+					case '*':
+						inBlockComment = true
+						i++
+					}
+				}
+			case '{':
+				depth++
+			case '}':
+				depth--
+			}
+		}
+	}
+	return depth
 }
 
 func qmlImports() []lsp.CompletionItem {
