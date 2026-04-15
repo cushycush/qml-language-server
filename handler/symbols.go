@@ -58,12 +58,12 @@ func leafSymbol(node *gotreesitter.Node, lang *gotreesitter.Language, content []
 func collectChildSymbols(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) []lsp.DocumentSymbol {
 	var symbols []lsp.DocumentSymbol
 
-	for i := 0; i < node.ChildCount(); i++ {
-		child := node.Child(i)
+	// Bindings live inside the ui_object_initializer child rather than directly
+	// under ui_object_definition; descend through both layers.
+	visit := func(child *gotreesitter.Node) {
 		if child == nil {
-			continue
+			return
 		}
-
 		switch child.Type(lang) {
 		case "ui_object_definition":
 			symbols = append(symbols, objectSymbol(child, lang, content))
@@ -74,6 +74,20 @@ func collectChildSymbols(node *gotreesitter.Node, lang *gotreesitter.Language, c
 				symbols = append(symbols, s)
 			}
 		}
+	}
+
+	for i := 0; i < node.ChildCount(); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		if child.Type(lang) == "ui_object_initializer" {
+			for j := 0; j < child.ChildCount(); j++ {
+				visit(child.Child(j))
+			}
+			continue
+		}
+		visit(child)
 	}
 
 	return symbols
