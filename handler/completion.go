@@ -73,6 +73,12 @@ func getContextCompletions(node *gotreesitter.Node, lang *gotreesitter.Language,
 	case "ui_object_definition":
 		items = append(items, getCompletionTypes()...)
 
+	case "ui_object_initializer":
+		// Cursor sits on a blank line inside `Foo { ... }`. Both new child
+		// objects and property bindings are valid here, so offer types,
+		// properties, and the property-declaration keywords.
+		items = append(items, objectBodyCompletions(findEnclosingTypeName(node, lang, content))...)
+
 	case "ui_binding":
 		items = append(items, qmlPropertyCompletions()...)
 
@@ -91,6 +97,14 @@ func getContextCompletions(node *gotreesitter.Node, lang *gotreesitter.Language,
 			parentType := parent.Type(lang)
 			if parentType == "ui_object_definition" || parentType == "ui_required" || parentType == "ui_property" {
 				items = append(items, getCompletionTypes()...)
+			}
+			// While the user is mid-word inside an object body the partial
+			// identifier shows up under an ERROR (the binding `name:` hasn't
+			// been typed yet) and tree-sitter often unwinds the whole file to
+			// a single ERROR. Confirm we're still inside a body before
+			// offering the same completions as the blank-line case.
+			if (parentType == "ERROR" || parentType == "ui_object_initializer") && isInsideObjectBody(node, lang, content) {
+				items = append(items, objectBodyCompletions(findEnclosingTypeName(node, lang, content))...)
 			}
 		}
 
@@ -228,6 +242,157 @@ func trimLeadingWhitespace(s string) string {
 	for ; i < len(s) && (s[i] == ' ' || s[i] == '\t'); i++ {
 	}
 	return s[i:]
+}
+
+// objectBodyCompletions is the set of items valid directly inside a
+// `Foo { ... }` body: generic properties, type-specific properties for
+// `enclosingType` (when known), child types, and property-declaration
+// keywords (`property`, `readonly property`, `signal`, ...).
+func objectBodyCompletions(enclosingType string) []lsp.CompletionItem {
+	items := qmlPropertyCompletions()
+	if enclosingType != "" {
+		items = append(items, typePropertyCompletions(enclosingType)...)
+	}
+	items = append(items, getCompletionTypes()...)
+	items = append(items, qmlKeywords()...)
+	return items
+}
+
+// isInsideObjectBody returns true if `node` sits inside a `Foo { ... }`
+// body. Walks ancestors first, then falls back to a brace-balance scan
+// because tree-sitter often collapses the whole document to ERROR while
+// the user is mid-word.
+func isInsideObjectBody(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) bool {
+	for n := node.Parent(); n != nil; n = n.Parent() {
+		if n.Type(lang) == "ui_object_initializer" {
+			return true
+		}
+	}
+	return len(openBraceStackBefore(content, node.StartByte())) > 0
+}
+
+// findEnclosingTypeName returns the type name of the nearest `Foo { ... }`
+// ancestor (e.g. "Window", "Text"), or "" if none can be determined.
+// Walks ancestors first, then falls back to a textual scan because
+// tree-sitter often collapses the whole document to ERROR while the user
+// is mid-word.
+func findEnclosingTypeName(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) string {
+	for n := node.Parent(); n != nil; n = n.Parent() {
+		if n.Type(lang) != "ui_object_definition" {
+			continue
+		}
+		for i := 0; i < n.ChildCount(); i++ {
+			ch := n.Child(i)
+			t := ch.Type(lang)
+			if t == "identifier" || t == "nested_identifier" {
+				return lastDottedSegment(string(content[ch.StartByte():ch.EndByte()]))
+			}
+		}
+	}
+	return enclosingTypeFromText(content, node.StartByte())
+}
+
+// enclosingTypeFromText finds the `{` that opens the body containing
+// `end`, then returns the identifier-like token immediately preceding it.
+// Returns "" if no unmatched `{` is found.
+func enclosingTypeFromText(content []byte, end uint32) string {
+	stack := openBraceStackBefore(content, end)
+	if len(stack) == 0 {
+		return ""
+	}
+	return identBefore(content, stack[len(stack)-1])
+}
+
+// openBraceStackBefore returns the byte offsets of `{`s in `content[:end]`
+// that have not yet been matched by a `}`. Ignores braces inside string
+// literals and comments.
+func openBraceStackBefore(content []byte, end uint32) []uint32 {
+	if int(end) > len(content) {
+		end = uint32(len(content))
+	}
+	var stack []uint32
+	inLineComment := false
+	inBlockComment := false
+	inString := false
+	var quote byte
+	for i := uint32(0); i < end; i++ {
+		c := content[i]
+		switch {
+		case inLineComment:
+			if c == '\n' {
+				inLineComment = false
+			}
+		case inBlockComment:
+			if c == '*' && i+1 < end && content[i+1] == '/' {
+				inBlockComment = false
+				i++
+			}
+		case inString:
+			if c == '\\' && i+1 < end {
+				i++
+				continue
+			}
+			if c == quote {
+				inString = false
+			}
+		default:
+			switch c {
+			case '"', '\'', '`':
+				inString = true
+				quote = c
+			case '/':
+				if i+1 < end {
+					switch content[i+1] {
+					case '/':
+						inLineComment = true
+						i++
+					case '*':
+						inBlockComment = true
+						i++
+					}
+				}
+			case '{':
+				stack = append(stack, i)
+			case '}':
+				if len(stack) > 0 {
+					stack = stack[:len(stack)-1]
+				}
+			}
+		}
+	}
+	return stack
+}
+
+// identBefore returns the identifier-like token immediately before `pos`,
+// skipping whitespace. Returns the last dotted segment so e.g.
+// "QtQuick.Window" yields "Window". Empty if none is found.
+func identBefore(content []byte, pos uint32) string {
+	i := int(pos) - 1
+	for i >= 0 && isSpaceByte(content[i]) {
+		i--
+	}
+	end := i + 1
+	for i >= 0 && (isIdentChar(content[i]) || content[i] == '.') {
+		i--
+	}
+	start := i + 1
+	if start >= end {
+		return ""
+	}
+	return lastDottedSegment(string(content[start:end]))
+}
+
+func isSpaceByte(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
+
+func lastDottedSegment(s string) string {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == '.' {
+			return s[i+1:]
+		}
+	}
+	return s
 }
 
 func qmlImports() []lsp.CompletionItem {

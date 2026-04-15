@@ -15,6 +15,7 @@ A Go-based Language Server for QML (Qt Meta-Object Language) that provides intel
   - QML types (QtQuick, QtQml, QtQuick.Controls)
   - Imports (`import QtQuick 2.0`)
   - Properties (`width`, `height`, `color`, `anchors`, etc.)
+  - Type-aware properties — inside a `Window` body you get `title`, `flags`, `visibility`; inside `Text` you get `wrapMode`, `elide`, `textFormat`; etc. Includes inheritance (e.g. `ApplicationWindow` picks up `Window`'s properties)
   - Signal handlers (`onClicked`, `onPressed`, etc.)
   - Values (`true`, `false`, colors, `parent`, `this`)
   - Anchor completions (`fill`, `centerIn`, `top`, `bottom`, etc.)
@@ -201,6 +202,7 @@ qml-language-server/
 │   ├── handler.go          # LSP handler + capability registration
 │   ├── hover.go            # Hover provider
 │   ├── completion.go       # Completion provider
+│   ├── typeproperties.go   # Per-type property tables (Window, Text, ...)
 │   ├── definition.go       # Go to definition
 │   ├── references.go       # Find references
 │   ├── diagnostics.go      # Parse error diagnostics

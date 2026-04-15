@@ -258,6 +258,86 @@ func TestCompletionPopulatesDocumentation(t *testing.T) {
 	}
 }
 
+func TestCompletionOffersPropertiesInsideObjectBody(t *testing.T) {
+	cases := []struct {
+		name     string
+		doc      string
+		position lsp.Position
+		// generic properties that must always appear inside any body
+		wantGeneric []string
+		// type-specific properties that must appear given the enclosing type
+		wantTypeSpecific []string
+	}{
+		{
+			name:             "blank line inside Window",
+			doc:              "import QtQuick\n\nWindow {\n    \n}\n",
+			position:         lsp.Position{Line: 3, Character: 4},
+			wantGeneric:      []string{"width", "height", "anchors"},
+			wantTypeSpecific: []string{"title", "flags", "visibility"},
+		},
+		{
+			name:             "blank line inside Text",
+			doc:              "import QtQuick\n\nText {\n    \n}\n",
+			position:         lsp.Position{Line: 3, Character: 4},
+			wantGeneric:      []string{"width", "height", "anchors"},
+			wantTypeSpecific: []string{"wrapMode", "elide", "textFormat"},
+		},
+		{
+			name:             "mid-word inside Rectangle",
+			doc:              "import QtQuick\n\nRectangle {\n    w\n}\n",
+			position:         lsp.Position{Line: 3, Character: 5},
+			wantGeneric:      []string{"width", "height", "anchors"},
+			wantTypeSpecific: []string{"border", "gradient", "antialiasing"},
+		},
+		{
+			name:             "ApplicationWindow inherits Window props",
+			doc:              "import QtQuick.Controls\n\nApplicationWindow {\n    \n}\n",
+			position:         lsp.Position{Line: 3, Character: 4},
+			wantGeneric:      []string{"width", "height"},
+			wantTypeSpecific: []string{"title", "flags"},
+		},
+		{
+			name:             "nested Text inside Window picks Text props",
+			doc:              "import QtQuick\n\nWindow {\n    Text {\n        \n    }\n}\n",
+			position:         lsp.Position{Line: 4, Character: 8},
+			wantGeneric:      []string{"width", "height"},
+			wantTypeSpecific: []string{"wrapMode", "elide"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(t, "test://foo.qml", tc.doc)
+			list, err := h.Completion(context.Background(), &lsp.CompletionParams{
+				TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+					TextDocument: lsp.TextDocumentIdentifier{URI: "test://foo.qml"},
+					Position:     tc.position,
+				},
+			})
+			if err != nil {
+				t.Fatalf("Completion returned error: %v", err)
+			}
+			if list == nil {
+				t.Fatal("Completion returned nil list")
+			}
+			labels := map[string]bool{}
+			for _, item := range list.Items {
+				labels[item.Label] = true
+			}
+			for _, want := range tc.wantGeneric {
+				if !labels[want] {
+					t.Errorf("expected generic property %q in completions; got %d items", want, len(list.Items))
+				}
+			}
+			for _, want := range tc.wantTypeSpecific {
+				if !labels[want] {
+					t.Errorf("expected type-specific property %q in completions; got %d items", want, len(list.Items))
+				}
+			}
+		})
+	}
+}
+
 func newTestHandler(t *testing.T, uri lsp.DocumentURI, text string) *Handler {
 	t.Helper()
 	h := New(nil)
