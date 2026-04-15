@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-15
+
+### Added
+- `textDocument/semanticTokens/full` — tree-sitter-driven semantic highlighting that classifies imports (namespace + keyword), object types, property/binding names, signal handlers (`event`), required properties, comments, strings, numbers, regexes, and keyword literals. Multi-line strings/comments are split per line; tokens are delta-encoded per the LSP spec.
+- Unit tests covering hover, completion, definition, references, document symbols, diagnostics, rename, signature help, and semantic tokens.
+
+### Fixed
+- `DocumentSymbol` now surfaces properties, bindings, and nested objects as children of their enclosing object — previously it walked one layer too shallow and returned classes with empty children.
+
 ### Changed
 - Internal docs: `CLAUDE.md` rewritten to reflect the current handler layout (workspace index, registry, no `cache.go`).
 
@@ -38,7 +47,8 @@ First tagged release.
 - Generated grammar blob cached on disk for fast startup.
 - Distribution: GitHub Actions release workflow, Dockerfile, README with installation and Neovim/blink.cmp setup.
 
-[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/cushycush/qml-language-server/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/cushycush/qml-language-server/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/cushycush/qml-language-server/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/cushycush/qml-language-server/releases/tag/v1.0.0
