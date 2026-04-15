@@ -5,11 +5,14 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Release ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         os: [linux, darwin, windows]
@@ -17,7 +20,7 @@ jobs:
         exclude:
           - os: windows
             arch: arm64
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,7 +28,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: Get version
         id: version
@@ -45,12 +48,15 @@ jobs:
           go build -ldflags="-s -w" -o "${NAME}" .
 
       - name: Create ZIP archive
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
+          EXTENSION=""
           if [ "${{ matrix.os }}" = "windows" ]; then
-            powershell -Command "Compress-Archive -Path 'qml-language-server-*.exe' -DestinationPath 'qml-language-server-${{ steps.version.outputs.VERSION }}-${{ matrix.os }}-${{ matrix.arch }}.zip'"
-          else
-            zip "qml-language-server-${{ steps.version.outputs.VERSION }}-${{ matrix.os }}-${{ matrix.arch }}.zip" "qml-language-server-${{ steps.version.outputs.VERSION }}-${{ matrix.os }}-${{ matrix.arch }}"
+            EXTENSION=".exe"
           fi
+          BASE="qml-language-server-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"
+          zip "${BASE}.zip" "${BASE}${EXTENSION}"
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
@@ -59,38 +65,3 @@ jobs:
             qml-language-server-*.zip
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
-
-  release-docker:
-    name: Docker Image
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: qml-language-server
-          tags: |
-            type=semver,pattern={{version}}
-            type=sha,prefix=
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
