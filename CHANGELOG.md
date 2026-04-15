@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-04-15
+
+### Added
+- `workspace/symbol` — search for QML components across the workspace by name. Backed by the existing workspace index (refreshed at startup and on `workspace/didChangeWatchedFiles`); query matches case-insensitive substrings of the top-level component name.
+
 ## [1.1.0] - 2026-04-15
 
 ### Added
@@ -47,7 +52,8 @@ First tagged release.
 - Generated grammar blob cached on disk for fast startup.
 - Distribution: GitHub Actions release workflow, Dockerfile, README with installation and Neovim/blink.cmp setup.
 
-[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/cushycush/qml-language-server/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/cushycush/qml-language-server/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/cushycush/qml-language-server/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/cushycush/qml-language-server/compare/v1.0.0...v1.0.1
