@@ -1,0 +1,44 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Changed
+- Internal docs: `CLAUDE.md` rewritten to reflect the current handler layout (workspace index, registry, no `cache.go`).
+
+## [1.0.2] - 2026
+
+### Added
+- Type-aware property completions inside object bodies — the completion list now reflects the enclosing QML type (`Window`, `Text`, `Rectangle`, `ApplicationWindow`, etc.) and includes inherited properties.
+
+### Changed
+- CI: bumped GitHub Actions to Node.js 24-compatible versions; pinned `golangci-lint-action` to a Node 24 runtime.
+
+## [1.0.1] - 2026
+
+### Fixed
+- Release workflow: granted `contents: write` so tag releases can publish artifacts; dropped the docker job; unified the zip step.
+- Lint findings flagged by golangci-lint v2.
+- CI: bumped the `go` directive to 1.25, upgraded the golangci-lint action, and passed `VERSION` through to the release build.
+
+## [1.0.0] - 2025
+
+First tagged release.
+
+### Added
+- LSP server speaking over stdio with capabilities for hover, completion, go-to-definition, find references, document symbols, document highlight, signature help, code actions, rename (with prepare), diagnostics, and inlay hints.
+- Tree-sitter QML grammar bundled and loaded in pure Go via `gotreesitter` + `grammargen`, with a hand-ported external scanner (ASI, template literals, regex).
+- Built-in type registry covering QtQuick, QtQuick.Controls, QtQuick.Layouts, and QtQml; Quickshell types, imports, singletons, and snippets.
+- Workspace index that scans `*.qml` files at startup so user-defined components show up in completions.
+- Diagnostics derived from tree-sitter ERROR/MISSING nodes; empty results normalized to `[]` for client compatibility.
+- Generated grammar blob cached on disk for fast startup.
+- Distribution: GitHub Actions release workflow, Dockerfile, README with installation and Neovim/blink.cmp setup.
+
+[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/cushycush/qml-language-server/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/cushycush/qml-language-server/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/cushycush/qml-language-server/releases/tag/v1.0.0
