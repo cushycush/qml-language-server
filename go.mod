@@ -1,6 +1,6 @@
 module qml-language-server
 
-go 1.26.1
+go 1.25
 
 require (
 	github.com/odvcencio/gotreesitter v0.13.4
