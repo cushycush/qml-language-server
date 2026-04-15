@@ -103,6 +103,10 @@ func (h *Handler) Initialize(_ context.Context, params *lsp.InitializeParams) (*
 			},
 			DiagnosticProvider: &lsp.DiagnosticOptions{},
 			InlayHintProvider:  &lsp.InlayHintOptions{},
+			SemanticTokensProvider: &lsp.SemanticTokensOptions{
+				Legend: SemanticTokensLegend(),
+				Full:   &lsp.SemanticTokensFull{},
+			},
 		},
 		ServerInfo: &lsp.ServerInfo{
 			Name:    "qml-language-server",
