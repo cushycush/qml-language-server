@@ -77,7 +77,7 @@ func getContextCompletions(node *gotreesitter.Node, lang *gotreesitter.Language,
 		// Cursor sits on a blank line inside `Foo { ... }`. Both new child
 		// objects and property bindings are valid here, so offer types,
 		// properties, and the property-declaration keywords.
-		items = append(items, objectBodyCompletions()...)
+		items = append(items, objectBodyCompletions(findEnclosingTypeName(node, lang, content))...)
 
 	case "ui_binding":
 		items = append(items, qmlPropertyCompletions()...)
@@ -104,7 +104,7 @@ func getContextCompletions(node *gotreesitter.Node, lang *gotreesitter.Language,
 			// a single ERROR. Confirm we're still inside a body before
 			// offering the same completions as the blank-line case.
 			if (parentType == "ERROR" || parentType == "ui_object_initializer") && isInsideObjectBody(node, lang, content) {
-				items = append(items, objectBodyCompletions()...)
+				items = append(items, objectBodyCompletions(findEnclosingTypeName(node, lang, content))...)
 			}
 		}
 
@@ -245,10 +245,14 @@ func trimLeadingWhitespace(s string) string {
 }
 
 // objectBodyCompletions is the set of items valid directly inside a
-// `Foo { ... }` body: properties, child types, and property-declaration
+// `Foo { ... }` body: generic properties, type-specific properties for
+// `enclosingType` (when known), child types, and property-declaration
 // keywords (`property`, `readonly property`, `signal`, ...).
-func objectBodyCompletions() []lsp.CompletionItem {
+func objectBodyCompletions(enclosingType string) []lsp.CompletionItem {
 	items := qmlPropertyCompletions()
+	if enclosingType != "" {
+		items = append(items, typePropertyCompletions(enclosingType)...)
+	}
 	items = append(items, getCompletionTypes()...)
 	items = append(items, qmlKeywords()...)
 	return items
@@ -264,16 +268,49 @@ func isInsideObjectBody(node *gotreesitter.Node, lang *gotreesitter.Language, co
 			return true
 		}
 	}
-	return openBraceDepthBefore(content, node.StartByte()) > 0
+	return len(openBraceStackBefore(content, node.StartByte())) > 0
 }
 
-// openBraceDepthBefore counts unmatched `{`s in `content[:end]`, ignoring
-// braces inside string literals and comments.
-func openBraceDepthBefore(content []byte, end uint32) int {
+// findEnclosingTypeName returns the type name of the nearest `Foo { ... }`
+// ancestor (e.g. "Window", "Text"), or "" if none can be determined.
+// Walks ancestors first, then falls back to a textual scan because
+// tree-sitter often collapses the whole document to ERROR while the user
+// is mid-word.
+func findEnclosingTypeName(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) string {
+	for n := node.Parent(); n != nil; n = n.Parent() {
+		if n.Type(lang) != "ui_object_definition" {
+			continue
+		}
+		for i := 0; i < n.ChildCount(); i++ {
+			ch := n.Child(i)
+			t := ch.Type(lang)
+			if t == "identifier" || t == "nested_identifier" {
+				return lastDottedSegment(string(content[ch.StartByte():ch.EndByte()]))
+			}
+		}
+	}
+	return enclosingTypeFromText(content, node.StartByte())
+}
+
+// enclosingTypeFromText finds the `{` that opens the body containing
+// `end`, then returns the identifier-like token immediately preceding it.
+// Returns "" if no unmatched `{` is found.
+func enclosingTypeFromText(content []byte, end uint32) string {
+	stack := openBraceStackBefore(content, end)
+	if len(stack) == 0 {
+		return ""
+	}
+	return identBefore(content, stack[len(stack)-1])
+}
+
+// openBraceStackBefore returns the byte offsets of `{`s in `content[:end]`
+// that have not yet been matched by a `}`. Ignores braces inside string
+// literals and comments.
+func openBraceStackBefore(content []byte, end uint32) []uint32 {
 	if int(end) > len(content) {
 		end = uint32(len(content))
 	}
-	depth := 0
+	var stack []uint32
 	inLineComment := false
 	inBlockComment := false
 	inString := false
@@ -315,13 +352,47 @@ func openBraceDepthBefore(content []byte, end uint32) int {
 					}
 				}
 			case '{':
-				depth++
+				stack = append(stack, i)
 			case '}':
-				depth--
+				if len(stack) > 0 {
+					stack = stack[:len(stack)-1]
+				}
 			}
 		}
 	}
-	return depth
+	return stack
+}
+
+// identBefore returns the identifier-like token immediately before `pos`,
+// skipping whitespace. Returns the last dotted segment so e.g.
+// "QtQuick.Window" yields "Window". Empty if none is found.
+func identBefore(content []byte, pos uint32) string {
+	i := int(pos) - 1
+	for i >= 0 && isSpaceByte(content[i]) {
+		i--
+	}
+	end := i + 1
+	for i >= 0 && (isIdentChar(content[i]) || content[i] == '.') {
+		i--
+	}
+	start := i + 1
+	if start >= end {
+		return ""
+	}
+	return lastDottedSegment(string(content[start:end]))
+}
+
+func isSpaceByte(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
+
+func lastDottedSegment(s string) string {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == '.' {
+			return s[i+1:]
+		}
+	}
+	return s
 }
 
 func qmlImports() []lsp.CompletionItem {
