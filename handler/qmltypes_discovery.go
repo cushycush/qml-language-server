@@ -16,8 +16,26 @@ import (
 // every qmldir/qmltypes pair it finds, and registers the types into the
 // global symbol registry. Hard-coded entries are never removed — qmltypes
 // data augments them so users never lose what they had.
-func DiscoverAndRegisterQMLTypes(logger *slog.Logger) {
+//
+// If workspaceRoots is non-empty, the function also looks for a .qmlls.ini
+// file (the same format Qt's qmlls reads) and adds its buildDir and
+// importPaths to the search.
+func DiscoverAndRegisterQMLTypes(logger *slog.Logger, workspaceRoots []string) {
 	paths := qmlImportPaths()
+
+	// Merge paths from .qmlls.ini if present.
+	if cfg := FindAndParseQMLLSIni(workspaceRoots); cfg != nil {
+		if logger != nil {
+			logger.Info("loaded .qmlls.ini", "buildDir", cfg.BuildDir, "importPaths", cfg.ImportPaths)
+		}
+		if cfg.BuildDir != "" {
+			paths = appendUnique(paths, cfg.BuildDir)
+		}
+		for _, p := range cfg.ImportPaths {
+			paths = appendUnique(paths, p)
+		}
+	}
+
 	if len(paths) == 0 {
 		if logger != nil {
 			logger.Info("no QML import paths found; skipping qmltypes discovery")
@@ -44,6 +62,19 @@ func DiscoverAndRegisterQMLTypes(logger *slog.Logger) {
 		}
 		registerQMLTypesModule(mod, dm.moduleName)
 	}
+}
+
+func appendUnique(paths []string, p string) []string {
+	p = filepath.Clean(p)
+	for _, existing := range paths {
+		if existing == p {
+			return paths
+		}
+	}
+	if info, err := os.Stat(p); err == nil && info.IsDir() {
+		paths = append(paths, p)
+	}
+	return paths
 }
 
 type discoveredModule struct {

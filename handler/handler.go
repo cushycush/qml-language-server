@@ -74,11 +74,12 @@ func (h *Handler) deleteDocument(uri lsp.DocumentURI) {
 }
 
 func (h *Handler) Initialize(_ context.Context, params *lsp.InitializeParams) (*lsp.InitializeResult, error) {
+	roots := workspaceRootsFromInitialize(params)
 	if h.workspace != nil {
-		h.workspace.setRoots(workspaceRootsFromInitialize(params))
+		h.workspace.setRoots(roots)
 		go h.workspace.scan()
 	}
-	go DiscoverAndRegisterQMLTypes(h.logger)
+	go DiscoverAndRegisterQMLTypes(h.logger, roots)
 	return &lsp.InitializeResult{
 		Capabilities: lsp.ServerCapabilities{
 			TextDocumentSync: &lsp.TextDocumentSyncOptions{
