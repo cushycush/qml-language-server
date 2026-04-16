@@ -125,14 +125,43 @@ For a modern completion experience with fuzzy matching and snippets, use [blink.
 ```lua
 {
   'saghen/blink.cmp',
+  dependencies = {
+    'rafamadriz/friendly-snippets', -- Optional: QML snippets
+  },
   opts = {
     sources = {
       default = { 'lsp' },
+      providers = {
+        lsp = {
+          name = 'qml',
+          module = 'blink.cmp.sources.lsp',
+          score_offset = 100, -- Boost LSP completions
+        },
+      },
     },
     completion = {
+      menu = {
+        border = 'rounded',
+        draw = {
+          components = {
+            kind_icon = {
+              width = 1,
+              text = {
+                blink.cmp.Icon('kind'),
+              },
+            },
+          },
+        },
+      },
       documentation = {
         auto_show = true,
+        window = {
+          border = 'rounded',
+        },
       },
+    },
+    snippets = {
+      preset = 'friendly-snippets',
     },
   },
 }
