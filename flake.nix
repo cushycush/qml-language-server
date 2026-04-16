@@ -19,7 +19,7 @@
             inherit version;
             src = self;
 
-            vendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+            vendorHash = "sha256-J+0kFTKgluf+mabJepW+MGXUdHqYLFaUVAZEWcyHmyk=";
 
             ldflags = [
               "-s" "-w"
