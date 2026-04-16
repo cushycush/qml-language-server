@@ -557,9 +557,14 @@ func (p *qmltypesParser) readIdent() string {
 	for p.pos < len(p.src) && isQmltypesIdentChar(p.src[p.pos]) {
 		p.pos++
 	}
-	// Allow dotted names like "QQuickItem::TransformOrigin" and "std::vector<bool>".
-	for p.pos < len(p.src) && (p.src[p.pos] == ':' || p.src[p.pos] == '<' || p.src[p.pos] == '>') {
-		p.pos++
+	// Allow C++ scoped names like "std::vector<bool>" and "QQuickItem::TransformOrigin".
+	// Only consume `::` (double colon) — a single `:` is the attribute separator.
+	for p.pos+1 < len(p.src) && ((p.src[p.pos] == ':' && p.src[p.pos+1] == ':') || p.src[p.pos] == '<' || p.src[p.pos] == '>') {
+		if p.src[p.pos] == ':' {
+			p.pos += 2 // skip ::
+		} else {
+			p.pos++ // skip < or >
+		}
 		for p.pos < len(p.src) && isQmltypesIdentChar(p.src[p.pos]) {
 			p.pos++
 		}
