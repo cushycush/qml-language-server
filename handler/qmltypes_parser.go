@@ -2,7 +2,6 @@ package handler
 
 import (
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -640,19 +639,4 @@ func cppTypeToQML(t string) string {
 	return s
 }
 
-// qtVersionFromExport extracts a numeric sort key from an export version
-// string like "6.7" → 607.
-func qtVersionFromExport(exp string) int {
-	if i := lastIndexByte(exp, ' '); i >= 0 {
-		ver := exp[i+1:]
-		parts := strings.SplitN(ver, ".", 2)
-		major, _ := strconv.Atoi(parts[0])
-		minor := 0
-		if len(parts) > 1 {
-			minor, _ = strconv.Atoi(parts[1])
-		}
-		return major*100 + minor
-	}
-	return 0
-}
 

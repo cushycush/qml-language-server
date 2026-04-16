@@ -129,12 +129,6 @@ func indexPrototype(comp *QMLTypesComponent) {
 	protoMu.Unlock()
 }
 
-func lookupPrototype(name string) (*QMLTypesComponent, bool) {
-	protoMu.RLock()
-	c, ok := protoIndex[name]
-	protoMu.RUnlock()
-	return c, ok
-}
 
 // registerQMLTypesModule converts parsed qmltypes components into QMLSymbol
 // entries and writes them into the global symbol registry. Existing entries
