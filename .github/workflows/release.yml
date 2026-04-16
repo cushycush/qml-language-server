@@ -65,3 +65,5 @@ jobs:
             qml-language-server-*.zip
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}

@@ -18,25 +18,7 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "ver=${TAG#v}" >> $GITHUB_OUTPUT
 
-      - name: Wait for release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ steps.version.outputs.tag }}"
-          for i in $(seq 1 30); do
-            COUNT=$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" \
-              --jq '.assets | length' 2>/dev/null || echo 0)
-            if [ "$COUNT" -ge 5 ]; then
-              echo "All assets available (${COUNT})"
-              exit 0
-            fi
-            echo "Waiting for assets... (${COUNT}/5, attempt ${i})"
-            sleep 10
-          done
-          echo "::error::Timed out waiting for release assets"
-          exit 1
-
-      - name: Download checksums
+      - name: Download and checksum
         env:
           VER: ${{ steps.version.outputs.tag }}
         run: |
