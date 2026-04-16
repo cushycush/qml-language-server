@@ -78,6 +78,7 @@ func (h *Handler) Initialize(_ context.Context, params *lsp.InitializeParams) (*
 		h.workspace.setRoots(workspaceRootsFromInitialize(params))
 		go h.workspace.scan()
 	}
+	go DiscoverAndRegisterQMLTypes(h.logger)
 	return &lsp.InitializeResult{
 		Capabilities: lsp.ServerCapabilities{
 			TextDocumentSync: &lsp.TextDocumentSyncOptions{
