@@ -24,10 +24,14 @@ type Handler struct {
 }
 
 func New(logger *slog.Logger) *Handler {
+	parser := NewQMLParser()
+	if parser == nil && logger != nil {
+		logger.Error("failed to load QML grammar; all language features will be disabled")
+	}
 	return &Handler{
 		logger:    logger,
 		documents: make(map[lsp.DocumentURI]string),
-		parser:    NewQMLParser(),
+		parser:    parser,
 		workspace: newWorkspaceIndex(),
 	}
 }
