@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-15
+
+### Added
+- **qmltypes/qmldir module discovery** — at startup the server walks Qt installation directories (`/usr/lib/qt6/qml/`, `/usr/lib/qt/qml/`, `QML_IMPORT_PATH`, `QML2_IMPORT_PATH`) and parses every `qmldir` + `.qmltypes` pair it finds. Types, properties, signals, methods, and enums from all installed Qt modules are registered into the symbol registry, providing completions and hover for the full Qt API rather than only the ~50 hard-coded types.
+- Recursive descent parser for the `.qmltypes` DSL format (supports both Qt5 object-map and Qt6 string-array enum value formats).
+- `qmldir` line-based parser extracting module name, typeinfo path, depends, and imports.
+- C++ → QML type name mapping (`QColor` → `color`, `QString` → `string`, `double` → `real`, etc.).
+- Hard-coded types, keywords, anchors, JS builtins, and Quickshell entries are preserved as fallbacks — qmltypes data augments but never overwrites them.
+
 ## [1.3.1] - 2026-04-15
 
 ### Fixed
@@ -62,7 +71,8 @@ First tagged release.
 - Generated grammar blob cached on disk for fast startup.
 - Distribution: GitHub Actions release workflow, Dockerfile, README with installation and Neovim/blink.cmp setup.
 
-[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/cushycush/qml-language-server/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/cushycush/qml-language-server/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/cushycush/qml-language-server/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/cushycush/qml-language-server/compare/v1.1.0...v1.2.0
