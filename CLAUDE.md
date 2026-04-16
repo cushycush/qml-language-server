@@ -29,8 +29,11 @@ One file per LSP feature (`hover.go`, `completion.go`, `definition.go`, `referen
 - `Handler.parser` (`*QMLParser`, `parser.go`) — wraps gotreesitter. Maintains a per-URI `*gotreesitter.Tree`, reparses incrementally via `ParseIncremental` when a previous tree exists.
 - `Handler.workspace` (`*workspaceIndex`, `workspace.go`) — scans workspace roots for `*.qml` files at startup so user-defined components show up in completions and the symbol registry.
 - `positions.go` — `positionToByte` / `byteOffsetToPosition` convert between LSP `Position` (line/char) and tree-sitter byte offsets, and `findSmallestNodeAt` resolves a cursor position to an AST node. Use these helpers from feature code.
-- `types.go` + `typeproperties.go` — hard-coded `qmlTypes` map and per-type property catalog for built-in QtQuick/QtQml/Controls/Layouts. Extend these to improve hover/completion for additional QML types. `quickshell.go` adds Quickshell-specific entries.
-- `registry.go` — process-wide `QMLSymbol` registry; `workspace.go` and the static type tables both publish into it so completion/hover share one lookup path.
+- `types.go` + `typeproperties.go` — hard-coded `qmlTypes` map and per-type property catalog for built-in QtQuick/QtQml/Controls/Layouts. `quickshell.go` adds Quickshell-specific entries. These serve as fallbacks when qmltypes files aren't available.
+- `registry.go` — process-wide `QMLSymbol` registry; `workspace.go`, the static type tables, and qmltypes discovery all publish into it so completion/hover share one lookup path.
+- `qmltypes_parser.go` + `qmltypes_types.go` — recursive descent parser for Qt's `.qmltypes` DSL format, producing structured Go types for components, properties, signals, methods, and enums.
+- `qmldir_parser.go` — parses `qmldir` files to discover module name and path to `.qmltypes`.
+- `qmltypes_discovery.go` — at startup, walks Qt install dirs and `QML_IMPORT_PATH` to find and parse every module's type info, then registers the results into the symbol registry without overwriting existing entries.
 
 ### Grammar package (`grammars/`)
 Loads the QML tree-sitter grammar into `gotreesitter`. Two embedded assets are combined at startup by `QmljsLanguage()` (grammars/loader.go):
