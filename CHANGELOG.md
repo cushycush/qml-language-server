@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-04-15
+
+### Fixed
+- Inlay hints no longer redundantly echo the property name on every binding. Hints now only appear on function call arguments whose callee has a known signature (`Qt.rect`, `console.log`, etc.), showing the parameter name being filled in.
+
 ## [1.3.0] - 2026-04-15
 
 ### Added
@@ -57,7 +62,8 @@ First tagged release.
 - Generated grammar blob cached on disk for fast startup.
 - Distribution: GitHub Actions release workflow, Dockerfile, README with installation and Neovim/blink.cmp setup.
 
-[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/cushycush/qml-language-server/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/cushycush/qml-language-server/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/cushycush/qml-language-server/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/cushycush/qml-language-server/compare/v1.0.2...v1.1.0
