@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-04-16
+
+### Added
+- **Signature help from qmltypes** — method signatures parsed from `.qmltypes` files are now registered for signature help. Extends coverage from 13 hand-rolled functions to every method Qt exposes. Both bare (`mapToItem`) and dotted (`Item.mapToItem`) call forms are supported.
+- **Range formatting** (`textDocument/rangeFormatting`) — format a selected range instead of the whole document.
+- **Folding ranges** (`textDocument/foldingRange`) — collapsible regions for object blocks (`{ }`) and multi-line comments.
+
 ## [1.5.0] - 2026-04-16
 
 ### Added
@@ -81,7 +88,8 @@ First tagged release.
 - Generated grammar blob cached on disk for fast startup.
 - Distribution: GitHub Actions release workflow, Dockerfile, README with installation and Neovim/blink.cmp setup.
 
-[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/cushycush/qml-language-server/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/cushycush/qml-language-server/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/cushycush/qml-language-server/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/cushycush/qml-language-server/compare/v1.3.0...v1.3.1
