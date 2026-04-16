@@ -89,7 +89,6 @@ func (h *Handler) Initialize(_ context.Context, params *lsp.InitializeParams) (*
 			},
 			HoverProvider: boolPtr(true),
 			CompletionProvider: &lsp.CompletionOptions{
-				ResolveProvider:   boolPtr(true),
 				TriggerCharacters: []string{".", ":", "<", "\"", "/"},
 			},
 			DefinitionProvider:        boolPtr(true),

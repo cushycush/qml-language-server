@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/odvcencio/gotreesitter"
 	"github.com/owenrumney/go-lsp/lsp"
@@ -141,28 +140,6 @@ func getAnchorCompletions() []lsp.CompletionItem {
 	return completionItemsByCategory("anchor")
 }
 
-func (h *Handler) ResolveCompletionItem(_ context.Context, item *lsp.CompletionItem) (*lsp.CompletionItem, error) {
-	if item.Documentation != nil {
-		return item, nil
-	}
-	if sym, ok := lookupSymbol(item.Label); ok {
-		item.Documentation = &lsp.MarkupContent{
-			Kind:  lsp.Markdown,
-			Value: sym.Render(),
-		}
-		if item.Detail == "" {
-			item.Detail = sym.Detail
-		}
-		return item, nil
-	}
-	if info, ok := getTypeInfo(item.Label); ok {
-		item.Documentation = &lsp.MarkupContent{
-			Kind:  lsp.Markdown,
-			Value: fmt.Sprintf("## `%s`\n\n%s\n\n**Type:** %s\n\n**Module:** %s", item.Label, info.Description, info.Type, info.Module),
-		}
-	}
-	return item, nil
-}
 
 type CompletionContext int
 
