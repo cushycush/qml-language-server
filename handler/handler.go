@@ -112,6 +112,7 @@ func (h *Handler) Initialize(_ context.Context, params *lsp.InitializeParams) (*
 				Legend: SemanticTokensLegend(),
 				Full:   &lsp.SemanticTokensFull{},
 			},
+			FoldingRangeProvider:            boolPtr(true),
 			WorkspaceSymbolProvider:         boolPtr(true),
 			DocumentFormattingProvider:      boolPtr(true),
 			DocumentRangeFormattingProvider: boolPtr(true),
