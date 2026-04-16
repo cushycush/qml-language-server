@@ -168,22 +168,6 @@ func indexPrototype(comp *QMLTypesComponent) {
 	protoMu.Unlock()
 }
 
-func getPrototype(cppName string) (*QMLTypesComponent, bool) {
-	protoMu.RLock()
-	c, ok := protoIndex[cppName]
-	protoMu.RUnlock()
-	return c, ok
-}
-
-// cppNameToQMLName maps a C++ class name to its QML export name using the
-// prototype index. Returns "" if the type has no QML exports.
-func cppNameToQMLName(cppName string) string {
-	comp, ok := getPrototype(cppName)
-	if !ok {
-		return ""
-	}
-	return comp.ExportedName()
-}
 
 // buildInheritanceChains walks the prototype index and populates baseTypes
 // for every exported QML type so that typePropertyCompletions can walk
