@@ -1,0 +1,121 @@
+name: Update AUR
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  aur-bin:
+    name: Update qml-language-server-bin
+    runs-on: ubuntu-latest
+    if: "!github.event.release.prerelease"
+
+    steps:
+      - name: Get version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "ver=${TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Wait for release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          for i in $(seq 1 30); do
+            COUNT=$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" \
+              --jq '.assets | length' 2>/dev/null || echo 0)
+            if [ "$COUNT" -ge 5 ]; then
+              echo "All assets available (${COUNT})"
+              exit 0
+            fi
+            echo "Waiting for assets... (${COUNT}/5, attempt ${i})"
+            sleep 10
+          done
+          echo "::error::Timed out waiting for release assets"
+          exit 1
+
+      - name: Download checksums
+        env:
+          VER: ${{ steps.version.outputs.tag }}
+        run: |
+          BASE="https://github.com/${{ github.repository }}/releases/download/${VER}"
+          curl -sLO "${BASE}/qml-language-server-${VER}-linux-amd64.zip"
+          curl -sLO "${BASE}/qml-language-server-${VER}-linux-arm64.zip"
+          sha256sum qml-language-server-*.zip > checksums.txt
+          cat checksums.txt
+          echo "sha_amd64=$(grep amd64 checksums.txt | cut -d' ' -f1)" >> $GITHUB_ENV
+          echo "sha_arm64=$(grep arm64 checksums.txt | cut -d' ' -f1)" >> $GITHUB_ENV
+
+      - name: Clone AUR repo
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          echo -e "Host aur.archlinux.org\n  IdentityFile ~/.ssh/aur\n  User aur\n  StrictHostKeyChecking accept-new" > ~/.ssh/config
+          git clone ssh://aur@aur.archlinux.org/qml-language-server-bin.git aur-bin
+
+      - name: Update PKGBUILD
+        env:
+          VER: ${{ steps.version.outputs.ver }}
+        run: |
+          cd aur-bin
+          cat > PKGBUILD << 'PKGEOF'
+          # Maintainer: Matthew Cushing <cushing.matt@gmail.com>
+          pkgname=qml-language-server-bin
+          pkgver=PLACEHOLDER_VER
+          pkgrel=1
+          pkgdesc="Language Server Protocol implementation for QML"
+          arch=('x86_64' 'aarch64')
+          url="https://github.com/cushycush/qml-language-server"
+          license=('MIT')
+          provides=('qml-language-server')
+          conflicts=('qml-language-server' 'qml-language-server-git')
+
+          _base_url="${url}/releases/download/v${pkgver}/qml-language-server-v${pkgver}"
+
+          source_x86_64=("${_base_url}-linux-amd64.zip")
+          source_aarch64=("${_base_url}-linux-arm64.zip")
+
+          sha256sums_x86_64=('PLACEHOLDER_AMD64')
+          sha256sums_aarch64=('PLACEHOLDER_ARM64')
+
+          package() {
+              cd "${srcdir}"
+              if [[ "${CARCH}" == "x86_64" ]]; then
+                  _bin="qml-language-server-v${pkgver}-linux-amd64"
+              else
+                  _bin="qml-language-server-v${pkgver}-linux-arm64"
+              fi
+              install -Dm755 "${_bin}" "${pkgdir}/usr/bin/qml-language-server"
+              install -Dm644 <(curl -sL "${url}/raw/v${pkgver}/LICENSE") "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+          }
+          PKGEOF
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' PKGBUILD
+          sed -i "s/PLACEHOLDER_VER/${VER}/" PKGBUILD
+          sed -i "s/PLACEHOLDER_AMD64/${sha_amd64}/" PKGBUILD
+          sed -i "s/PLACEHOLDER_ARM64/${sha_arm64}/" PKGBUILD
+
+          cat PKGBUILD
+
+      - name: Generate .SRCINFO
+        uses: docker://archlinux:latest
+        with:
+          args: bash -c "pacman -Sy --noconfirm pacman-contrib && cd /github/workspace/aur-bin && su nobody -s /bin/bash -c 'makepkg --printsrcinfo' > .SRCINFO"
+
+      - name: Push to AUR
+        env:
+          VER: ${{ steps.version.outputs.ver }}
+        run: |
+          cd aur-bin
+          git config user.name "Matthew Cushing"
+          git config user.email "cushing.matt@gmail.com"
+          git add PKGBUILD .SRCINFO
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Update to ${VER}"
+          git push
