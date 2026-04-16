@@ -46,6 +46,16 @@ yay -S qml-language-server-bin
 yay -S qml-language-server-git
 ```
 
+### Nix
+
+```bash
+# Run directly
+nix run github:cushycush/qml-language-server
+
+# Or add to your flake inputs
+inputs.qml-language-server.url = "github:cushycush/qml-language-server";
+```
+
 ### Prebuilt Binaries
 
 Download the latest release for your platform from the [Releases page](https://github.com/cushycush/qml-language-server/releases).
