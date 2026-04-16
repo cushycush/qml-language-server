@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-04-16
+
+### Added
+- **`.qmlls.ini` support** — reads the same config file format Qt's qmlls uses. Projects that generate one (e.g. Quickshell) now get full type discovery without manual qmldir setup. `buildDir` and `importPaths` from the config are merged into the module search.
+- **Prototype chain walking** — completions now include inherited properties from the full type hierarchy. `Rectangle` shows `Item`'s properties (`x`, `y`, `width`, `height`, `visible`, `anchors`, etc.), not just its own 4. Chains are built automatically from qmltypes `prototype` fields.
+
+### Fixed
+- Dropped `ResolveProvider` — docs are shipped eagerly on every completion item, so the resolve round-trip was unnecessary overhead.
+- Grammar load failures are now logged so users can diagnose why the LSP appears to do nothing.
+
 ## [1.4.0] - 2026-04-15
 
 ### Added
@@ -71,7 +81,8 @@ First tagged release.
 - Generated grammar blob cached on disk for fast startup.
 - Distribution: GitHub Actions release workflow, Dockerfile, README with installation and Neovim/blink.cmp setup.
 
-[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/cushycush/qml-language-server/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/cushycush/qml-language-server/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/cushycush/qml-language-server/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/cushycush/qml-language-server/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/cushycush/qml-language-server/compare/v1.2.0...v1.3.0

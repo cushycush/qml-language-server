@@ -62,6 +62,14 @@ func DiscoverAndRegisterQMLTypes(logger *slog.Logger, workspaceRoots []string) {
 		}
 		registerQMLTypesModule(mod, dm.moduleName)
 	}
+
+	// Build inheritance chains from the prototype index so
+	// typePropertyCompletions walks inherited properties.
+	buildInheritanceChains()
+
+	if logger != nil {
+		logger.Info("built inheritance chains", "types", len(baseTypes))
+	}
 }
 
 func appendUnique(paths []string, p string) []string {
@@ -160,6 +168,53 @@ func indexPrototype(comp *QMLTypesComponent) {
 	protoMu.Unlock()
 }
 
+
+// buildInheritanceChains walks the prototype index and populates baseTypes
+// for every exported QML type so that typePropertyCompletions can walk
+// inherited properties. Called once after all modules are registered.
+func buildInheritanceChains() {
+	protoMu.RLock()
+	defer protoMu.RUnlock()
+
+	for _, comp := range protoIndex {
+		qmlName := comp.ExportedName()
+		if qmlName == "" {
+			continue
+		}
+		// Already has a hand-coded chain — don't overwrite.
+		if _, exists := baseTypes[qmlName]; exists {
+			continue
+		}
+		chain := resolvePrototypeChain(comp.Prototype)
+		if len(chain) > 0 {
+			baseTypes[qmlName] = chain
+		}
+	}
+}
+
+// resolvePrototypeChain walks the prototype field up the C++ inheritance
+// hierarchy and returns QML-visible type names. Stops at QObject or after
+// 32 hops (safety).
+func resolvePrototypeChain(cppPrototype string) []string {
+	var chain []string
+	visited := map[string]bool{}
+	current := cppPrototype
+	for i := 0; i < 32 && current != ""; i++ {
+		if visited[current] {
+			break
+		}
+		visited[current] = true
+		parent, ok := protoIndex[current]
+		if !ok {
+			break
+		}
+		if name := parent.ExportedName(); name != "" {
+			chain = append(chain, name)
+		}
+		current = parent.Prototype
+	}
+	return chain
+}
 
 // registerQMLTypesModule converts parsed qmltypes components into QMLSymbol
 // entries and writes them into the global symbol registry. Existing entries
