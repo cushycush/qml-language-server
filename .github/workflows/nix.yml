@@ -1,0 +1,55 @@
+name: Update Nix vendorHash
+
+on:
+  push:
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-hash:
+    name: Compute vendorHash
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Compute vendorHash
+        id: hash
+        run: |
+          # Build will fail with the fake hash but print the correct one
+          HASH=$(nix build .# 2>&1 | grep -oP 'got:\s+\K\S+' || true)
+          if [ -z "$HASH" ]; then
+            # If build succeeded, hash is already correct
+            echo "vendorHash is already up to date"
+            exit 0
+          fi
+          echo "hash=${HASH}" >> $GITHUB_OUTPUT
+          echo "Computed vendorHash: ${HASH}"
+
+      - name: Update flake.nix
+        if: steps.hash.outputs.hash
+        env:
+          HASH: ${{ steps.hash.outputs.hash }}
+        run: |
+          sed -i "s|vendorHash = \".*\";|vendorHash = \"${HASH}\";|" flake.nix
+          cat flake.nix | grep vendorHash
+
+      - name: Commit
+        if: steps.hash.outputs.hash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add flake.nix
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(nix): update vendorHash"
+          git push
