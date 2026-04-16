@@ -276,6 +276,9 @@ func registerQMLTypesModule(mod *QMLTypesModule, fallbackModule string) {
 
 		// Register type-specific properties from qmltypes.
 		registerQMLTypesProperties(comp, qmlName)
+
+		// Register method signatures for signature help.
+		registerQMLTypesSignatures(comp, qmlName)
 	}
 }
 
@@ -350,6 +353,54 @@ func registerQMLTypesProperties(comp *QMLTypesComponent, qmlName string) {
 		if _, exists := lookupSymbol(sym.Label); !exists {
 			registerSymbols(sym)
 		}
+	}
+}
+
+// registerQMLTypesSignatures registers method signatures from a parsed
+// component into the functionSignatures map used by signature help. Methods
+// are registered under both "method" (bare) and "TypeName.method" (dotted)
+// keys. Existing hand-coded entries are never overwritten.
+func registerQMLTypesSignatures(comp *QMLTypesComponent, qmlName string) {
+	for _, m := range comp.Methods {
+		if m.Name == "" {
+			continue
+		}
+		sig := buildSignatureInfo(m)
+
+		// Register as "TypeName.method" for dotted calls (e.g. Qt.binding).
+		dotted := qmlName + "." + m.Name
+		if _, exists := functionSignatures[dotted]; !exists {
+			functionSignatures[dotted] = sig
+		}
+
+		// Register as bare "method" for unqualified calls. Skip if already
+		// registered (hand-coded entries or an earlier type's method wins).
+		if _, exists := functionSignatures[m.Name]; !exists {
+			functionSignatures[m.Name] = sig
+		}
+	}
+}
+
+func buildSignatureInfo(m QMLTypesMethod) lsp.SignatureInformation {
+	var params []lsp.ParameterInformation
+	var paramLabels []string
+	for _, p := range m.Parameters {
+		qmlType := cppTypeToQML(p.Type)
+		label := p.Name + ": " + qmlType
+		paramLabels = append(paramLabels, label)
+		params = append(params, lsp.ParameterInformation{
+			Label:         label,
+			Documentation: plainText(qmlType),
+		})
+	}
+	ret := cppTypeToQML(m.ReturnType)
+	sigLabel := m.Name + "(" + strings.Join(paramLabels, ", ") + ")"
+	if ret != "void" {
+		sigLabel += ": " + ret
+	}
+	return lsp.SignatureInformation{
+		Label:      sigLabel,
+		Parameters: params,
 	}
 }
 
