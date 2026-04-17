@@ -98,6 +98,31 @@ func publishWorkspaceSymbol(c workspaceComponent) {
 		Description: "Defined in `" + c.Path + "`.",
 		Category:    "workspace",
 	})
+	recordWorkspaceURI(c.Name, c.URI)
+}
+
+// workspaceURIs maps component name → file URI so go-to-definition can jump
+// cross-file without coupling definition.go to the Handler. Populated every
+// time a workspace component is published.
+var (
+	workspaceURIsMu sync.RWMutex
+	workspaceURIs   = map[string]lsp.DocumentURI{}
+)
+
+func recordWorkspaceURI(name string, uri lsp.DocumentURI) {
+	if name == "" || uri == "" {
+		return
+	}
+	workspaceURIsMu.Lock()
+	workspaceURIs[name] = uri
+	workspaceURIsMu.Unlock()
+}
+
+// LookupWorkspaceURI returns the file URI for a workspace component, or "".
+func LookupWorkspaceURI(name string) lsp.DocumentURI {
+	workspaceURIsMu.RLock()
+	defer workspaceURIsMu.RUnlock()
+	return workspaceURIs[name]
 }
 
 // registerURI indexes a single QML document URI, used when a file is opened
