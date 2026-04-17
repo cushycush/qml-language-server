@@ -116,6 +116,7 @@ func (h *Handler) Initialize(_ context.Context, params *lsp.InitializeParams) (*
 			WorkspaceSymbolProvider:         boolPtr(true),
 			DocumentFormattingProvider:      boolPtr(true),
 			DocumentRangeFormattingProvider: boolPtr(true),
+			DocumentLinkProvider:            &lsp.DocumentLinkOptions{},
 		},
 		ServerInfo: &lsp.ServerInfo{
 			Name:    "qml-language-server",

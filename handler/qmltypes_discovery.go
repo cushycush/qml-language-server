@@ -88,6 +88,34 @@ func appendUnique(paths []string, p string) []string {
 type discoveredModule struct {
 	moduleName    string
 	qmltypesPath  string
+	qmldirPath    string
+}
+
+// moduleQMLDirs maps module name to the absolute path of the qmldir file that
+// declared it. Populated by DiscoverAndRegisterQMLTypes and used by document
+// links to resolve `import Foo` targets. First writer wins so Qt6 takes
+// precedence over Qt5 when both are installed.
+var (
+	moduleDirsMu sync.RWMutex
+	moduleQMLDirs = map[string]string{}
+)
+
+func recordModuleQMLDir(name, path string) {
+	if name == "" || path == "" {
+		return
+	}
+	moduleDirsMu.Lock()
+	if _, ok := moduleQMLDirs[name]; !ok {
+		moduleQMLDirs[name] = path
+	}
+	moduleDirsMu.Unlock()
+}
+
+// LookupModuleQMLDir returns the qmldir path registered for a module, or "".
+func LookupModuleQMLDir(name string) string {
+	moduleDirsMu.RLock()
+	defer moduleDirsMu.RUnlock()
+	return moduleQMLDirs[name]
 }
 
 // qmlImportPaths returns directories to scan for QML modules.
@@ -149,7 +177,9 @@ func discoverModules(root string) []discoveredModule {
 		modules = append(modules, discoveredModule{
 			moduleName:   qmld.Name,
 			qmltypesPath: typesPath,
+			qmldirPath:   path,
 		})
+		recordModuleQMLDir(qmld.Name, path)
 		return nil
 	})
 	return modules
