@@ -41,7 +41,11 @@ func (h *Handler) Completion(_ context.Context, params *lsp.CompletionParams) (*
 		items = append(items, getCompletionTypes()...)
 		items = append(items, h.workspaceCompletions()...)
 	case ContextProperty:
-		items = append(items, qmlPropertyCompletions()...)
+		if typeItems := h.idMemberCompletions(params.TextDocument.URI, lineText, char); typeItems != nil {
+			items = append(items, typeItems...)
+		} else {
+			items = append(items, qmlPropertyCompletions()...)
+		}
 	case ContextId:
 		items = append(items, qmlKeywords()...)
 	case ContextAfterColon:
@@ -378,6 +382,70 @@ func qmlImports() []lsp.CompletionItem {
 
 func qmlPropertyCompletions() []lsp.CompletionItem {
 	return completionItemsByCategory("property", "anchor")
+}
+
+// idMemberCompletions returns type-specific completions when the cursor sits
+// just after an `<id>.` and `<id>` resolves to an id binding in the document.
+// Returns nil when the identifier before `.` isn't a known id, so the caller
+// can fall back to generic property completions.
+func (h *Handler) idMemberCompletions(uri lsp.DocumentURI, lineText string, char int) []lsp.CompletionItem {
+	if h.parser == nil {
+		return nil
+	}
+	ident := identifierBeforeDot(lineText, char)
+	if ident == "" {
+		return nil
+	}
+	tree := h.parser.GetTree(uri)
+	if tree == nil {
+		return nil
+	}
+	root := tree.RootNode()
+	if root == nil {
+		return nil
+	}
+	doc, ok := h.getDocument(uri)
+	if !ok {
+		return nil
+	}
+	index := buildIDTypeIndex(root, h.parser.Language(), []byte(doc))
+	typeName, found := index[ident]
+	if !found {
+		return nil
+	}
+	return typePropertyCompletions(typeName)
+}
+
+// identifierBeforeDot returns the identifier immediately preceding the `.`
+// that triggered this completion. Walks backward from `pos`, skipping
+// whitespace, then past a single `.`, then collects the identifier-like run.
+// Returns "" if the pattern doesn't match (e.g. multi-level `foo.bar.`).
+func identifierBeforeDot(text string, pos int) string {
+	if pos > len(text) {
+		pos = len(text)
+	}
+	i := pos - 1
+	for i >= 0 && isSpaceByte(text[i]) {
+		i--
+	}
+	if i < 0 || text[i] != '.' {
+		return ""
+	}
+	i--
+	end := i + 1
+	for i >= 0 && isIdentChar(text[i]) {
+		i--
+	}
+	start := i + 1
+	if start >= end {
+		return ""
+	}
+	// Reject multi-dot chains (e.g. `anchors.fill.`) — this helper only
+	// handles the single-level `<id>.` case.
+	if start > 0 && text[start-1] == '.' {
+		return ""
+	}
+	return text[start:end]
 }
 
 func qmlKeywords() []lsp.CompletionItem {
