@@ -70,6 +70,64 @@ func TestDefinitionOnUnknownReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestDefinitionJumpsToWorkspaceComponent(t *testing.T) {
+	// Simulate the workspace index having indexed MyWidget.qml by registering
+	// the component URI directly. The registry is shared package state, so
+	// tests must register unique names to avoid cross-test leakage.
+	targetURI := lsp.DocumentURI("file:///tmp/workspace/MyTestWidgetXYZ.qml")
+	registerSymbols(QMLSymbol{
+		Label:    "MyTestWidgetXYZ",
+		Category: "workspace",
+	})
+	recordWorkspaceURI("MyTestWidgetXYZ", targetURI)
+
+	doc := "import QtQuick\n\nMyTestWidgetXYZ {}\n"
+	h := newTestHandler(t, "test://use.qml", doc)
+
+	locs, err := h.Definition(context.Background(), &lsp.DefinitionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: "test://use.qml"},
+			Position:     lsp.Position{Line: 2, Character: 5}, // inside MyTestWidgetXYZ
+		},
+	})
+	if err != nil {
+		t.Fatalf("Definition: %v", err)
+	}
+	if len(locs) != 1 {
+		t.Fatalf("expected one location, got %d", len(locs))
+	}
+	if locs[0].URI != targetURI {
+		t.Errorf("URI = %q, want %q", locs[0].URI, targetURI)
+	}
+}
+
+func TestDefinitionWorkspaceWithoutURIReturnsEmpty(t *testing.T) {
+	// A workspace-category symbol with no recorded URI (shouldn't happen in
+	// practice but guards against a stale registry entry) must not crash
+	// or return a zero-URI location.
+	registerSymbols(QMLSymbol{
+		Label:    "OrphanedWidgetABC",
+		Category: "workspace",
+	})
+	// Deliberately do not call recordWorkspaceURI.
+
+	doc := "import QtQuick\n\nOrphanedWidgetABC {}\n"
+	h := newTestHandler(t, "test://orphan.qml", doc)
+
+	locs, err := h.Definition(context.Background(), &lsp.DefinitionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: "test://orphan.qml"},
+			Position:     lsp.Position{Line: 2, Character: 5},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Definition: %v", err)
+	}
+	if len(locs) != 0 {
+		t.Errorf("expected no locations for orphaned workspace symbol, got %d", len(locs))
+	}
+}
+
 func TestExtractIdFromBinding(t *testing.T) {
 	cases := []struct {
 		in   string

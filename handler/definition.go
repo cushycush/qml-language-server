@@ -132,7 +132,18 @@ func findIdDeclarations(idName string, root *gotreesitter.Node, lang *gotreesitt
 func findComponentDefinition(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte, root *gotreesitter.Node, uri lsp.DocumentURI) []lsp.Location {
 	name := string(content[node.StartByte():node.EndByte()])
 	sym, ok := lookupSymbol(name)
-	if !ok || sym.Module == "" {
+	if !ok {
+		return nil
+	}
+	// Workspace components resolve to their .qml file. Use the start of the
+	// file as the target range — editors navigate to the top of the file.
+	if sym.Category == "workspace" {
+		if target := LookupWorkspaceURI(name); target != "" {
+			return []lsp.Location{{URI: target, Range: lsp.Range{}}}
+		}
+		return nil
+	}
+	if sym.Module == "" {
 		return nil
 	}
 	return findImportForModule(root, lang, content, sym.Module, uri)
