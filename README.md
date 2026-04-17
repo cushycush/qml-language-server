@@ -16,13 +16,15 @@ A Go-based Language Server for QML (Qt Meta-Object Language) that provides intel
   - QML types — all types from installed Qt modules (QtQuick, QtQml, QtQuick.Controls, QtQuick.Layouts, QtMultimedia, Qt3D, and more)
   - Imports (`import QtQuick`)
   - Properties — generic (`width`, `height`, `color`, `anchors`) and type-specific (`Window.title`, `Text.wrapMode`, `Image.fillMode`); includes inheritance
+  - Type-aware member completion on ids — `root.` where `id: root` is a `Rectangle` offers Rectangle + Item properties, not the generic list
   - Signal handlers (`onClicked`, `onPressed`, etc.)
   - Methods and enums from Qt type info
   - Values (`true`, `false`, colors, `parent`, `this`)
   - Anchor completions (`fill`, `centerIn`, `top`, `bottom`, etc.)
   - Quickshell types, imports, singletons, and boilerplate snippets
   - Workspace components (user-defined `.qml` files)
-- **Go to Definition** - Jump to identifier definitions across the workspace
+- **Go to Definition** - Jumps to ids in the current file, cross-file to workspace components (e.g. `MyButton` → `MyButton.qml`), and to the originating `import` line for built-in types
+- **Document Links** - `import` statements are clickable — named modules jump to the `qmldir` discovered at startup; relative `import "./components"` jumps to the target directory's `qmldir`
 - **Find References** - Find all uses of an identifier
 - **Diagnostics** - Parse error highlighting from tree-sitter
 - **Document Symbols** - File outline with hierarchical structure (properties, bindings, nested objects)
