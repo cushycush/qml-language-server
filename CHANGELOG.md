@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Document links** (`textDocument/documentLink`) — `import QtQuick`, `import QtQuick.Controls`, and relative `import "./components"` statements are now clickable. Named modules jump to the `qmldir` discovered at startup; relative imports jump to the target directory's `qmldir` when present, otherwise to the directory itself. Dotted module names fall back to parent modules when the exact name isn't registered.
+
 ## [1.6.0] - 2026-04-16
 
 ### Added
