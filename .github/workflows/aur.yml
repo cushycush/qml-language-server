@@ -88,7 +88,7 @@ jobs:
       - name: Generate .SRCINFO
         uses: docker://archlinux:latest
         with:
-          args: bash -c "pacman -Sy --noconfirm pacman-contrib && cd /github/workspace/aur-bin && su nobody -s /bin/bash -c 'makepkg --printsrcinfo' > .SRCINFO"
+          args: bash -c "pacman -Sy --noconfirm pacman-contrib && useradd -m builder && cd /github/workspace/aur-bin && chown builder . && su builder -c 'makepkg --printsrcinfo' > .SRCINFO"
 
       - name: Push to AUR
         env:
