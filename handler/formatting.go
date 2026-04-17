@@ -33,6 +33,43 @@ func (h *Handler) Formatting(_ context.Context, params *lsp.DocumentFormattingPa
 	}}, nil
 }
 
+func (h *Handler) RangeFormatting(_ context.Context, params *lsp.DocumentRangeFormattingParams) ([]lsp.TextEdit, error) {
+	doc, ok := h.getDocument(params.TextDocument.URI)
+	if !ok {
+		return nil, nil
+	}
+
+	lines := getLines(doc)
+	startLine := int(params.Range.Start.Line)
+	endLine := int(params.Range.End.Line)
+	if startLine >= len(lines) {
+		return []lsp.TextEdit{}, nil
+	}
+	if endLine >= len(lines) {
+		endLine = len(lines) - 1
+	}
+
+	// Extract the selected range, format it, and replace just that span.
+	var selected strings.Builder
+	for i := startLine; i <= endLine; i++ {
+		selected.WriteString(lines[i])
+		selected.WriteByte('\n')
+	}
+	original := selected.String()
+	formatted := formatQML(original, params.Options)
+	if formatted == original {
+		return []lsp.TextEdit{}, nil
+	}
+
+	return []lsp.TextEdit{{
+		Range: lsp.Range{
+			Start: lsp.Position{Line: params.Range.Start.Line, Character: 0},
+			End:   lsp.Position{Line: endLine + 1, Character: 0},
+		},
+		NewText: formatted,
+	}}, nil
+}
+
 // formatQML applies the indentation/whitespace rules. It walks the document
 // character-by-character to track string/comment state so braces inside those
 // don't move the indentation depth.

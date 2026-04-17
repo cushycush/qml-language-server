@@ -61,9 +61,8 @@ jobs:
       - name: Upload release asset
         uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.RELEASE_PAT }}
           files: |
             qml-language-server-*.zip
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
