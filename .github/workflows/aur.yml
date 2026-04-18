@@ -3,18 +3,27 @@ name: Update AUR
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v1.7.0)'
+        required: true
 
 jobs:
   aur-bin:
     name: Update qml-language-server-bin
     runs-on: ubuntu-latest
-    if: "!github.event.release.prerelease"
+    if: "github.event_name == 'workflow_dispatch' || !github.event.release.prerelease"
 
     steps:
       - name: Get version
         id: version
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "ver=${TAG#v}" >> $GITHUB_OUTPUT
 
@@ -23,8 +32,13 @@ jobs:
           VER: ${{ steps.version.outputs.tag }}
         run: |
           BASE="https://github.com/${{ github.repository }}/releases/download/${VER}"
-          curl -sLO "${BASE}/qml-language-server-${VER}-linux-amd64.zip"
-          curl -sLO "${BASE}/qml-language-server-${VER}-linux-arm64.zip"
+          # -f fails on HTTP errors (so a 404 doesn't silently write "Not Found" to the file).
+          # --retry + --retry-all-errors retries 404s, which handles the race where the release
+          # event fires before all matrix jobs in release.yml have uploaded their assets.
+          curl -sLOf --retry 30 --retry-delay 10 --retry-all-errors \
+            "${BASE}/qml-language-server-${VER}-linux-amd64.zip"
+          curl -sLOf --retry 30 --retry-delay 10 --retry-all-errors \
+            "${BASE}/qml-language-server-${VER}-linux-arm64.zip"
           sha256sum qml-language-server-*.zip > checksums.txt
           cat checksums.txt
           echo "sha_amd64=$(grep amd64 checksums.txt | cut -d' ' -f1)" >> $GITHUB_ENV
