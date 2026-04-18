@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Release ${{ matrix.os }}-${{ matrix.arch }}
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
 
     strategy:
@@ -58,11 +58,32 @@ jobs:
           BASE="qml-language-server-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"
           zip "${BASE}.zip" "${BASE}${EXTENSION}"
 
-      - name: Upload release asset
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}-${{ matrix.arch }}
+          path: qml-language-server-*.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
           token: ${{ secrets.RELEASE_PAT }}
-          files: |
-            qml-language-server-*.zip
+          files: dist/qml-language-server-*.zip
           draft: false
+          fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}

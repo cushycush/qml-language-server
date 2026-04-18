@@ -41,8 +41,19 @@ jobs:
             "${BASE}/qml-language-server-${VER}-linux-arm64.zip"
           sha256sum qml-language-server-*.zip > checksums.txt
           cat checksums.txt
-          echo "sha_amd64=$(grep amd64 checksums.txt | cut -d' ' -f1)" >> $GITHUB_ENV
-          echo "sha_arm64=$(grep arm64 checksums.txt | cut -d' ' -f1)" >> $GITHUB_ENV
+          SHA_AMD64=$(grep amd64 checksums.txt | cut -d' ' -f1)
+          SHA_ARM64=$(grep arm64 checksums.txt | cut -d' ' -f1)
+          # Defense in depth: distinct arches cannot produce the same hash. If they match,
+          # both downloads returned the same body (e.g. an error page) and we must not
+          # publish. release.yml should already prevent this by attaching all assets before
+          # firing the release event, but refuse to poison the AUR repo if something slips.
+          if [[ "${SHA_AMD64}" == "${SHA_ARM64}" ]]; then
+            echo "ERROR: amd64 and arm64 sha256 are identical (${SHA_AMD64})" >&2
+            echo "Refusing to publish — downloads likely returned the same error body." >&2
+            exit 1
+          fi
+          echo "sha_amd64=${SHA_AMD64}" >> $GITHUB_ENV
+          echo "sha_arm64=${SHA_ARM64}" >> $GITHUB_ENV
 
       - name: Clone AUR repo
         env:
