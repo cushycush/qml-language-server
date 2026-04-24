@@ -161,6 +161,15 @@ func detectCompletionContext(text string, pos int) CompletionContext {
 		pos = len(text)
 	}
 
+	trimmed := trimLeadingWhitespace(text[:pos])
+
+	// If the first token on the line is "import", everything after is a
+	// module name.
+	if hasWordPrefix(trimmed, "import") {
+		return ContextImport
+	}
+
+
 	// Look at the last non-whitespace byte before the cursor: a '.' means the
 	// user is chaining into an anchor/nested member, a ':' means they're on
 	// the value side of a binding.
@@ -178,15 +187,8 @@ func detectCompletionContext(text string, pos int) CompletionContext {
 		break
 	}
 
-	trimmed := trimLeadingWhitespace(text[:pos])
 	if trimmed == "" {
 		return ContextDefault
-	}
-
-	// If the first token on the line is "import", everything after is a
-	// module name.
-	if hasWordPrefix(trimmed, "import") {
-		return ContextImport
 	}
 
 	if isUpperCase(trimmed) {
