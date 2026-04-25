@@ -21,7 +21,7 @@ A Go-based Language Server for QML (Qt Meta-Object Language) that provides intel
   - Methods and enums from Qt type info
   - Values (`true`, `false`, colors, `parent`, `this`)
   - Anchor completions (`fill`, `centerIn`, `top`, `bottom`, etc.)
-  - Quickshell types, imports, singletons, and boilerplate snippets
+  - [Quickshell](https://quickshell.org/) types, imports, singletons, and boilerplate snippets
   - Workspace components (user-defined `.qml` files)
 - **Go to Definition** - Jumps to ids in the current file, cross-file to workspace components (e.g. `MyButton` → `MyButton.qml`), and to the originating `import` line for built-in types
 - **Document Links** - `import` statements are clickable — named modules jump to the `qmldir` discovered at startup; relative `import "./components"` jumps to the target directory's `qmldir`
@@ -97,24 +97,16 @@ make build
 For Neovim 0.11+, use the built-in LSP configuration:
 
 ```lua
-vim.lsp.config.qml = {
-  name = "qml-language-server",
-  filetypes = { "qml" },
-  root_dir = function(fname)
-    local root_patterns = { '.git', '.qml', 'qmldir' }
-    for _, pattern in ipairs(root_patterns) do
-      local root = vim.fs.find(pattern, { path = fname, upward = true })[1]
-      if root then
-        return vim.fs.dirname(root)
-      end
-    end
-    return vim.fs.dirname(fname)
-  end,
+vim.lsp.config("qml-language-server", {
   cmd = { "qml-language-server" },
-}
+  filetypes = { "qml" },
+  root_markers = { { "qmldir", "shell.qml" }, ".git" },
+})
 
-vim.lsp.enable("qml")
+vim.lsp.enable("qml-language-server")
 ```
+
+> Note: `shell.qml` is specific to [Quickshell](https://quickshell.org/) and can be omitted if you are only concerned with QML development only.
 
 For Neovim 0.10 and earlier, use `lspconfig`:
 
