@@ -144,7 +144,6 @@ func getAnchorCompletions() []lsp.CompletionItem {
 	return completionItemsByCategory("anchor")
 }
 
-
 type CompletionContext int
 
 const (
@@ -168,7 +167,6 @@ func detectCompletionContext(text string, pos int) CompletionContext {
 	if hasWordPrefix(trimmed, "import") {
 		return ContextImport
 	}
-
 
 	// Look at the last non-whitespace byte before the cursor: a '.' means the
 	// user is chaining into an anchor/nested member, a ':' means they're on
