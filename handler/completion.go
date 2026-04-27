@@ -144,7 +144,6 @@ func getAnchorCompletions() []lsp.CompletionItem {
 	return completionItemsByCategory("anchor")
 }
 
-
 type CompletionContext int
 
 const (
@@ -159,6 +158,14 @@ const (
 func detectCompletionContext(text string, pos int) CompletionContext {
 	if pos > len(text) {
 		pos = len(text)
+	}
+
+	trimmed := trimLeadingWhitespace(text[:pos])
+
+	// If the first token on the line is "import", everything after is a
+	// module name.
+	if hasWordPrefix(trimmed, "import") {
+		return ContextImport
 	}
 
 	// Look at the last non-whitespace byte before the cursor: a '.' means the
@@ -178,15 +185,8 @@ func detectCompletionContext(text string, pos int) CompletionContext {
 		break
 	}
 
-	trimmed := trimLeadingWhitespace(text[:pos])
 	if trimmed == "" {
 		return ContextDefault
-	}
-
-	// If the first token on the line is "import", everything after is a
-	// module name.
-	if hasWordPrefix(trimmed, "import") {
-		return ContextImport
 	}
 
 	if isUpperCase(trimmed) {
