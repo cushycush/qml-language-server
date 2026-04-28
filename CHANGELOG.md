@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **Type inference for id member expressions** — typing `root.` where `id: root` resolves to a known type now completes with that type's properties (and everything it inherits via the prototype chain) rather than the generic property list. Works even while the file is mid-edit and error-recovering, via a textual fallback that finds the enclosing type when tree-sitter can't wrap it in a `ui_object_definition`.
+## [1.7.1] - 2026-04-27
+
+### Fixed
+- **Server crash on inlay hints / signature help during startup** — the `functionSignatures` map was written by the qmltypes discovery goroutine while LSP request handlers read from it, which Go's runtime aborts as `concurrent map read and map write`. Editors saw the LSP die seconds after opening a `.qml` file. Access is now serialized through a sync.RWMutex.
+
+## [1.7.0] - 2026-04-16
 
 ### Added
+- **Type inference for id member expressions** — typing `root.` where `id: root` resolves to a known type now completes with that type's properties (and everything it inherits via the prototype chain) rather than the generic property list. Works even while the file is mid-edit and error-recovering, via a textual fallback that finds the enclosing type when tree-sitter can't wrap it in a `ui_object_definition`.
 - **Document links** (`textDocument/documentLink`) — `import QtQuick`, `import QtQuick.Controls`, and relative `import "./components"` statements are now clickable. Named modules jump to the `qmldir` discovered at startup; relative imports jump to the target directory's `qmldir` when present, otherwise to the directory itself. Dotted module names fall back to parent modules when the exact name isn't registered.
 - **Cross-file go-to-definition for workspace components** — `gd` on a user-defined component like `MyButton` now jumps to `MyButton.qml` in the workspace rather than staying in the current file. Built-in Qt types still navigate to the originating `import` line.
+
+### Fixed
+- Dot-prefixed import completion (e.g. `import QtQuick.|`) no longer breaks when typing past the dot.
 
 ## [1.6.0] - 2026-04-16
 
