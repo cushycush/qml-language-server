@@ -2,11 +2,46 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/owenrumney/go-lsp/lsp"
 )
+
+// TestFunctionSignaturesConcurrentAccess guards against the race that crashed
+// the server in the wild: qmltypes discovery wrote to functionSignatures from
+// a background goroutine while inlay-hint and signature-help requests read it
+// from request goroutines. Run under `go test -race`; without the mutex this
+// fails with "fatal error: concurrent map read and map write".
+func TestFunctionSignaturesConcurrentAccess(t *testing.T) {
+	const writers, readers, iters = 4, 8, 500
+	var wg sync.WaitGroup
+
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				registerSignatureIfAbsent(
+					fmt.Sprintf("racy.method%d_%d", id, i),
+					lsp.SignatureInformation{Label: "racy"},
+				)
+			}
+		}(w)
+	}
+	for r := 0; r < readers; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				_, _ = lookupSignature("Qt.rect")
+			}
+		}()
+	}
+	wg.Wait()
+}
 
 func TestSignatureHelpForKnownCallReportsActiveParameter(t *testing.T) {
 	// `Qt.rect(1, 2, |` — cursor immediately after the second comma puts us on
