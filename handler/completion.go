@@ -60,9 +60,32 @@ func (h *Handler) Completion(_ context.Context, params *lsp.CompletionParams) (*
 	}
 
 	return &lsp.CompletionList{
-		Items:        items,
+		Items:        dedupeCompletionItems(items),
 		IsIncomplete: false,
 	}, nil
+}
+
+// dedupeCompletionItems removes duplicate items by Label, keeping the first
+// occurrence. The AST-derived block at the top of Completion and the
+// context-switch fallback both add the same generic categories (types,
+// imports, properties, keywords), so without this clients show every entry
+// twice. First-wins preserves the more specific AST-driven items (e.g.
+// type-specific properties for the enclosing type) over the generic
+// fallbacks that follow.
+func dedupeCompletionItems(items []lsp.CompletionItem) []lsp.CompletionItem {
+	if len(items) == 0 {
+		return items
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]lsp.CompletionItem, 0, len(items))
+	for _, item := range items {
+		if _, ok := seen[item.Label]; ok {
+			continue
+		}
+		seen[item.Label] = struct{}{}
+		out = append(out, item)
+	}
+	return out
 }
 
 func getContextCompletions(node *gotreesitter.Node, lang *gotreesitter.Language, content []byte) []lsp.CompletionItem {
