@@ -46,7 +46,7 @@ func callArgumentHints(call *gotreesitter.Node, lang *gotreesitter.Language, con
 	if callee == "" {
 		return nil
 	}
-	sig, ok := functionSignatures[callee]
+	sig, ok := lookupSignature(callee)
 	if !ok || len(sig.Parameters) == 0 {
 		return nil
 	}

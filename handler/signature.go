@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"sync"
 
 	"github.com/owenrumney/go-lsp/lsp"
 )
@@ -9,6 +10,12 @@ import (
 // functionSignatures are resolved from the label the user just typed. These
 // are a tiny hand-rolled set; fuller signature help requires reading the
 // qmltypes files Qt ships.
+//
+// The qmltypes discovery goroutine writes new entries while LSP request
+// handlers read them, so all access goes through signaturesMu. Go's runtime
+// will abort the process on an unsynchronized read/write, which surfaced as
+// a hard crash on first inlay-hint request before discovery finished.
+var signaturesMu sync.RWMutex
 var functionSignatures = map[string]lsp.SignatureInformation{
 	"Qt.rect": {
 		Label: "Qt.rect(x: real, y: real, width: real, height: real): rect",
@@ -73,7 +80,7 @@ func (h *Handler) SignatureHelp(_ context.Context, params *lsp.SignatureHelpPara
 	if callName == "" {
 		return nil, nil
 	}
-	sig, ok := functionSignatures[callName]
+	sig, ok := lookupSignature(callName)
 	if !ok {
 		return nil, nil
 	}
@@ -160,6 +167,24 @@ func extractCallee(line string, parenIdx int) string {
 
 func plainText(s string) *lsp.MarkupContent {
 	return &lsp.MarkupContent{Kind: lsp.PlainText, Value: s}
+}
+
+func lookupSignature(name string) (lsp.SignatureInformation, bool) {
+	signaturesMu.RLock()
+	defer signaturesMu.RUnlock()
+	sig, ok := functionSignatures[name]
+	return sig, ok
+}
+
+// registerSignatureIfAbsent stores sig under name unless an entry already
+// exists. Hand-coded entries from the literal above always win over discovered
+// ones, matching the previous behavior.
+func registerSignatureIfAbsent(name string, sig lsp.SignatureInformation) {
+	signaturesMu.Lock()
+	defer signaturesMu.Unlock()
+	if _, exists := functionSignatures[name]; !exists {
+		functionSignatures[name] = sig
+	}
 }
 
 func countParams(text string) int {

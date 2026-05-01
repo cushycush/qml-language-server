@@ -397,17 +397,10 @@ func registerQMLTypesSignatures(comp *QMLTypesComponent, qmlName string) {
 		}
 		sig := buildSignatureInfo(m)
 
-		// Register as "TypeName.method" for dotted calls (e.g. Qt.binding).
-		dotted := qmlName + "." + m.Name
-		if _, exists := functionSignatures[dotted]; !exists {
-			functionSignatures[dotted] = sig
-		}
-
-		// Register as bare "method" for unqualified calls. Skip if already
-		// registered (hand-coded entries or an earlier type's method wins).
-		if _, exists := functionSignatures[m.Name]; !exists {
-			functionSignatures[m.Name] = sig
-		}
+		// "TypeName.method" for dotted calls (e.g. Qt.binding). Bare "method"
+		// for unqualified calls. Hand-coded entries and earlier types win.
+		registerSignatureIfAbsent(qmlName+"."+m.Name, sig)
+		registerSignatureIfAbsent(m.Name, sig)
 	}
 }
 
